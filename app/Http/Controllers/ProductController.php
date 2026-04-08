@@ -7,21 +7,97 @@ use App\Models\Product;
 use App\Models\Offer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class ProductController extends Controller
 {
     /**
-     * Display a listing of the products (for the authenticated artisan)
+     * Get current user (temporary for testing)
+     */
+    private function getCurrentUser()
+    {
+        // مؤقتاً: استخدم المستخدم رقم 1
+        $user = \App\Models\User::find(1);
+        
+        // بعد إضافة Authentication، استخدم:
+        // $user = Auth::user();
+        
+        return $user;
+    }
+
+    /**
+     * Upload image to storage
+     */
+    private function uploadImage($imageFile)
+    {
+        if (!$imageFile) return null;
+        
+        try {
+            $fileName = time() . '_' . uniqid() . '.' . $imageFile->getClientOriginalExtension();
+            $path = $imageFile->storeAs('products', $fileName, 'public');
+            
+            return 'storage/' . $path;
+        } catch (\Exception $e) {
+            Log::error('Image upload failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Upload Base64 image from Flutter Web/Mobile
+     */
+    private function uploadBase64Image($base64String)
+    {
+        try {
+            // إزالة البيانات الوصفية من Base64 (data:image/jpeg;base64,)
+            $imageData = preg_replace('#^data:image/\w+;base64,#i', '', $base64String);
+            $imageData = str_replace(' ', '+', $imageData);
+            $decodedImage = base64_decode($imageData);
+            
+            if ($decodedImage === false) {
+                Log::error('Base64 decode failed');
+                return null;
+            }
+            
+            // تحديد نوع الصورة من الـ Base64
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = finfo_buffer($finfo, $decodedImage);
+            finfo_close($finfo);
+            
+            $extension = match($mimeType) {
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp',
+                default => 'jpg'
+            };
+            
+            $fileName = time() . '_' . uniqid() . '.' . $extension;
+            $path = 'products/' . $fileName;
+            
+            Storage::disk('public')->put($path, $decodedImage);
+            
+            Log::info('Base64 image saved: ' . $path);
+            
+            return 'storage/' . $path;
+        } catch (\Exception $e) {
+            Log::error('Base64 image upload failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Display a listing of the products
      */
     public function index(Request $request)
     {
-        ///** @var \App\Models\User|null $user */
-        // $user = Auth::user();
-         $user = \App\Models\User::find(1); 
+        $user = $this->getCurrentUser();
         
-        // Temporary: use user id 1 if no authenticated user
         if (!$user) {
-            $products = Product::with('offer')->paginate(4);
+            $products = Product::with(['offer' => function($q) {
+                $q->where('end_date', '>=', now());
+            }])->paginate(4);
             return response()->json([
                 'data' => $products,
                 'message' => 'Products retrieved successfully'
@@ -34,31 +110,49 @@ class ProductController extends Controller
         
         $query = Product::where('seller_id', $user->id);
         
-        // Search filter
+        // جلب العروض النشطة فقط
+        $query->with(['offer' => function($q) {
+            $q->where('end_date', '>=', now());
+        }]);
+        
+        // 1. فلترة البحث (Search)
         if ($request->has('search') && $request->search) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            $search = $request->search;
+            $query->where('name', 'like', '%' . $search . '%');
         }
         
-        // Status filter
-        if ($request->has('status')) {
-            if ($request->status == 'Active') {
-                $query->where('stock', '>', 0);
-            } elseif ($request->status == 'Out of Stock') {
-                $query->where('stock', 0);
+        // 2. فلترة الحالة (Status Filter)
+        if ($request->has('status') && $request->status != 'All Status') {
+            switch ($request->status) {
+                case 'On Sale':
+                    $query->where('is_sale', true);
+                    break;
+                case 'In Stock':
+                    $query->where('stock', '>', 0);
+                    break;
+                case 'Out of Stock':
+                    $query->where('stock', 0);
+                    break;
+                case 'No Comments':
+                    $query->whereDoesntHave('comments');
+                    break;
             }
         }
         
-        // Sort filter
-        if ($request->has('sort')) {
+        // 3. ترتيب المنتجات (Sort Filter)
+        if ($request->has('sort') && $request->sort != 'Newest') {
             switch ($request->sort) {
-                case 'Oldest':
-                    $query->orderBy('created_at', 'asc');
+                case 'Top Selling':
+                    $query->orderBy('sales_count', 'desc');
                     break;
-                case 'Price High':
+                case 'Highest Price':
                     $query->orderBy('price', 'desc');
                     break;
-                case 'Price Low':
+                case 'Lowest Price':
                     $query->orderBy('price', 'asc');
+                    break;
+                case 'Top Liked':
+                    $query->orderBy('likes_count', 'desc');
                     break;
                 default:
                     $query->orderBy('created_at', 'desc');
@@ -67,7 +161,7 @@ class ProductController extends Controller
             $query->orderBy('created_at', 'desc');
         }
         
-        $products = $query->with('offer')->paginate(10);
+        $products = $query->paginate(4);
         
         return response()->json([
             'data' => $products,
@@ -76,20 +170,14 @@ class ProductController extends Controller
     }
     
     /**
-     * Store a newly created product
+     * Store a newly created product (يدعم الصورة و Base64)
      */
     public function store(Request $request)
     {
-        ///** @var \App\Models\User|null $user */
-        //$user = Auth::user();
-         $user = \App\Models\User::find(1); 
-        // Check if user exists
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized. Please login.'], 401);
-        }
+        $user = $this->getCurrentUser();
         
-        if (!$user->isArtisan()) {
-            return response()->json(['message' => 'Only artisans can add products'], 403);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 401);
         }
         
         $request->validate([
@@ -98,8 +186,24 @@ class ProductController extends Controller
             'description' => 'required|string',
             'price' => 'required|numeric|min:0',
             'stock' => 'required|integer|min:0',
-            'image' => 'nullable|string',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'image_base64' => 'nullable|string',
         ]);
+        
+        $imagePath = null;
+        
+        // 1. رفع صورة عادية (من Postman أو Mobile Multipart)
+        if ($request->hasFile('image')) {
+            $imagePath = $this->uploadImage($request->file('image'));
+        }
+        // 2. رفع صورة Base64 (من Flutter Web/Mobile)
+        else if ($request->image_base64) {
+            $imagePath = $this->uploadBase64Image($request->image_base64);
+        }
+        // 3. رابط صورة خارجي
+        else if ($request->image_url) {
+            $imagePath = $request->image_url;
+        }
         
         $product = Product::create([
             'seller_id' => $user->id,
@@ -108,7 +212,7 @@ class ProductController extends Controller
             'description' => $request->description,
             'price' => $request->price,
             'stock' => $request->stock,
-            'image' => $request->image,
+            'image' => $imagePath,
             'likes_count' => 0,
             'is_sale' => false,
             'sales_count' => 0,
@@ -125,7 +229,13 @@ class ProductController extends Controller
      */
     public function show($id)
     {
-        $product = Product::with(['offer', 'comments.user', 'details'])->find($id);
+        $product = Product::with([
+            'offer' => function($q) {
+                $q->where('end_date', '>=', now());
+            },
+            'comments.user',
+            'details'
+        ])->find($id);
         
         if (!$product) {
             return response()->json(['message' => 'Product not found'], 404);
@@ -142,19 +252,12 @@ class ProductController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized. Please login.'], 401);
-        }
+        Log::info('Update product request', ['id' => $id, 'data' => $request->all()]);
         
+        $user = $this->getCurrentUser();
         $product = Product::find($id);
         
-        if (!$product) {
-            return response()->json(['message' => 'Product not found'], 404);
-        }
-        
-        if ($product->seller_id != $user->id) {
+        if (!$product || $product->seller_id != $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
         
@@ -165,9 +268,29 @@ class ProductController extends Controller
             'price' => 'sometimes|numeric|min:0',
             'stock' => 'sometimes|integer|min:0',
             'image' => 'nullable|string',
+            'image_base64' => 'nullable|string',
         ]);
         
-        $product->update($request->only(['name', 'category', 'description', 'price', 'stock', 'image']));
+        $data = $request->only(['name', 'category', 'description', 'price', 'stock']);
+        
+        // معالجة الصورة
+        if ($request->hasFile('image')) {
+            if ($product->image && Storage::disk('public')->exists(str_replace('storage/', '', $product->image))) {
+                Storage::disk('public')->delete(str_replace('storage/', '', $product->image));
+            }
+            $data['image'] = $this->uploadImage($request->file('image'));
+        } else if ($request->image_base64) {
+            if ($product->image && Storage::disk('public')->exists(str_replace('storage/', '', $product->image))) {
+                Storage::disk('public')->delete(str_replace('storage/', '', $product->image));
+            }
+            $data['image'] = $this->uploadBase64Image($request->image_base64);
+        } else if ($request->image_url) {
+            $data['image'] = $request->image_url;
+        }
+        
+        $product->update($data);
+        
+        Log::info('Product updated', ['product' => $product]);
         
         return response()->json([
             'data' => $product,
@@ -180,8 +303,8 @@ class ProductController extends Controller
      */
     public function updateDescription(Request $request, $id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -213,8 +336,8 @@ class ProductController extends Controller
      */
     public function destroy($id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -241,8 +364,8 @@ class ProductController extends Controller
      */
     public function addOffer(Request $request, $id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -278,7 +401,9 @@ class ProductController extends Controller
         $product->update(['is_sale' => true]);
         
         return response()->json([
-            'data' => $product->load('offer'),
+            'data' => $product->load(['offer' => function($q) {
+                $q->where('end_date', '>=', now());
+            }]),
             'message' => 'Offer added successfully'
         ]);
     }
@@ -288,8 +413,8 @@ class ProductController extends Controller
      */
     public function removeOffer($id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -341,8 +466,8 @@ class ProductController extends Controller
      */
     public function addDetail(Request $request, $id)
     {
-        //$user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -378,8 +503,8 @@ class ProductController extends Controller
      */
     public function updateAllDetails(Request $request, $id)
     {
-       // $user = Auth::user();
-        $user = \App\Models\User::find(1);
+        $user = $this->getCurrentUser();
+        
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
@@ -417,20 +542,20 @@ class ProductController extends Controller
     /**
      * Get comments for a product
      */
-   public function getComments($id)
-{
-    $product = Product::find($id);
-    
-    if (!$product) {
-        return response()->json(['message' => 'Product not found'], 404);
+    public function getComments($id)
+    {
+        $product = Product::find($id);
+        
+        if (!$product) {
+            return response()->json(['message' => 'Product not found'], 404);
+        }
+        
+        // جلب جميع التعليقات مع المستخدم
+        $comments = $product->comments()->with('user')->get();
+        
+        return response()->json([
+            'data' => $comments,
+            'message' => 'Comments retrieved successfully'
+        ]);
     }
-    
-    // جلب جميع التعليقات مع المستخدم
-    $comments = $product->comments()->with('user')->get();
-    
-    return response()->json([
-        'data' => $comments,
-        'message' => 'Comments retrieved successfully'
-    ]);
-}
 }

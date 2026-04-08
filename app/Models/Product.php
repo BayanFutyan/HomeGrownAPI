@@ -97,4 +97,40 @@ class Product extends Model
         $now = now();
         return $this->offer->start_date <= $now && $this->offer->end_date >= $now;
     }
+
+    // ============================================================
+    // ✅ دوال جديدة لتحديث حالة is_sale تلقائياً
+    // ============================================================
+
+    /**
+     * تحديث حالة is_sale تلقائياً بناءً على العرض النشط
+     */
+    public function updateSaleStatus(): void
+    {
+        $hasActiveOffer = $this->offer()
+            ->where('end_date', '>=', now())
+            ->exists();
+        
+        if ($this->is_sale != $hasActiveOffer) {
+            $this->update(['is_sale' => $hasActiveOffer]);
+        }
+    }
+
+    /**
+     * الحصول على العرض النشط فقط (الذي لم ينتهِ)
+     */
+    public function getActiveOffer()
+    {
+        return $this->offer()
+            ->where('end_date', '>=', now())
+            ->first();
+    }
+
+    /**
+     * التحقق من وجود عرض نشط
+     */
+    public function hasActiveOffer(): bool
+    {
+        return $this->getActiveOffer() !== null;
+    }
 }

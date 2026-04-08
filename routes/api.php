@@ -8,7 +8,7 @@ use App\Http\Controllers\ProductDetailController;
 use App\Http\Controllers\FollowerController;
 use App\Http\Controllers\UserController;
 
-// Products Routes
+// Products Routes 
 Route::prefix('products')->group(function () {
     Route::get('/', [ProductController::class, 'index']);
     Route::post('/', [ProductController::class, 'store']);
@@ -47,3 +47,5 @@ Route::prefix('user')->group(function () {
     Route::get('/followers', [UserController::class, 'followers']);
     Route::get('/following', [UserController::class, 'following']);
 });
+
+Route::post('/comments/{id}/toggle-like', [CommentController::class, 'toggleLike']);

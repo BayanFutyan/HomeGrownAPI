@@ -9,9 +9,6 @@ class Offer extends Model
 {
     use HasFactory;
 
-    // ============================================================
-    // الأعمدة المسموح بتعبئتها
-    // ============================================================
     protected $fillable = [
         'id',
         'product_id',
@@ -21,9 +18,6 @@ class Offer extends Model
         'discounted_price',
     ];
 
-    // ============================================================
-    // تحويل أنواع البيانات
-    // ============================================================
     protected $casts = [
         'discount_value' => 'decimal:2',
         'discounted_price' => 'decimal:2',
@@ -31,29 +25,34 @@ class Offer extends Model
         'end_date' => 'date',
     ];
 
-    // ============================================================
-    // العلاقات
-    // ============================================================
+    // ✅ Model Events: تتغير is_sale تلقائياً عند حفظ أو حذف العرض
+    protected static function booted()
+    {
+        // عند إنشاء أو تحديث العرض
+        static::saved(function ($offer) {
+            $offer->product->updateSaleStatus();
+        });
+        
+        // عند حذف العرض
+        static::deleted(function ($offer) {
+            $offer->product->updateSaleStatus();
+        });
+    }
 
     /**
-     * المنتج المرتبط بهذا العرض
+     * العلاقة مع المنتج
      */
     public function product()
     {
         return $this->belongsTo(Product::class);
     }
 
-    // ============================================================
-    // دوال مساعدة
-    // ============================================================
-
     /**
-     * هل العرض فعال؟
+     * التحقق من أن العرض لا يزال فعالاً
      */
-   public function isActive(): bool
-{
-    $today = today();
-
-    return $this->start_date <= $today && $this->end_date >= $today;
-}
+    public function isActive(): bool
+    {
+        $now = now();
+        return $this->start_date <= $now && $this->end_date >= $now;
+    }
 }

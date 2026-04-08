@@ -70,4 +70,36 @@ class CommentController extends Controller
             'message' => 'Comment deleted successfully'
         ]);
     }
+
+
+    public function toggleLike($id)
+{
+    $user = \App\Models\User::find(1); // مؤقتاً
+    $comment = Comment::find($id);
+    
+    if (!$comment) {
+        return response()->json(['message' => 'Comment not found'], 404);
+    }
+    
+    $product = $comment->product;
+    
+    // فقط صاحب المنتج يمكنه الإعجاب
+    if ($product->seller_id != $user->id) {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+    
+    // تبديل حالة الإعجاب
+    if ($comment->likes_count == 1) {
+        $comment->update(['likes_count' => 0]);
+        $liked = false;
+    } else {
+        $comment->update(['likes_count' => 1]);
+        $liked = true;
+    }
+    
+    return response()->json([
+        'liked' => $liked,
+        'likes_count' => $comment->likes_count
+    ]);
+}
 }
