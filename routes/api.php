@@ -7,6 +7,8 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\ProductDetailController;
 use App\Http\Controllers\FollowerController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\OrderController;
+
 
 // Products Routes 
 Route::prefix('products')->group(function () {
@@ -49,3 +51,17 @@ Route::prefix('user')->group(function () {
 });
 
 Route::post('/comments/{id}/toggle-like', [CommentController::class, 'toggleLike']);
+
+
+
+
+// Orders Routes
+Route::prefix('orders')->group(function () {
+    Route::get('/seller/summary', [OrderController::class, 'ordersSummary']);
+    Route::get('/seller/list/all', [OrderController::class, 'getAllSellerOrders']);  // ✅ تأكد من وجود هذا السطر
+    Route::get('/seller/list', [OrderController::class, 'sellerOrders']);
+    Route::get('/', [OrderController::class, 'index']);
+    Route::get('/{id}', [OrderController::class, 'show']);
+    Route::put('/{id}/status', [OrderController::class, 'updateStatus']);
+    Route::post('/{id}/cancel', [OrderController::class, 'cancel']);
+});
