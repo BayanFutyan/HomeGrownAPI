@@ -8,6 +8,8 @@ use App\Http\Controllers\ProductDetailController;
 use App\Http\Controllers\FollowerController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\FcmTokenController;
+use App\Http\Controllers\NotificationController;
 
 
 // Products Routes 
@@ -65,3 +67,12 @@ Route::prefix('orders')->group(function () {
     Route::put('/{id}/status', [OrderController::class, 'updateStatus']);
     Route::post('/{id}/cancel', [OrderController::class, 'cancel']);
 });
+
+//Route::middleware('auth:sanctum')->post('/fcm-token', [FcmTokenController::class, 'store']);
+Route::post('/fcm-token', [FcmTokenController::class, 'store']);
+
+//http://127.0.0.1:8000/api/notifications/test
+
+Route::get('/notifications/test', [NotificationController::class, 'storeTest']);
+Route::get('/notifications', [NotificationController::class, 'index']);
+Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);

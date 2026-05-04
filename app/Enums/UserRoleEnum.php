@@ -7,7 +7,7 @@ enum UserRoleEnum: string
 {
     case ADMIN = 'admin';
     case ARTISAN = 'artisan';      // صاحب المعرض / الحرفي
-    case PROJECT_OWNER = 'project_owner';  // صاحب المشروع
+    case PROJECT_OWNER = 'exhibition_owner';  // صاحب المشروع
     case USER = 'user';            // مستخدم عادي
 
     /**
