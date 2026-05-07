@@ -8,14 +8,10 @@ use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
-    /**
-     * جلب جميع طلبات المستخدم الحالي (كمشتري)
-     */
     public function index()
     {
-        // TODO: بعدين نغير إلى Auth::id()
-        $userId = 2; // مؤقتاً user101@example.com كمشتري
-        
+        $userId = Auth::id();
+
         $orders = Order::with(['items.product', 'items.details'])
             ->where('customer_id', $userId)
             ->orderBy('created_at', 'desc')
@@ -27,65 +23,42 @@ class OrderController extends Controller
         ]);
     }
 
-    /**
-     * جلب طلبات البائع (الطلبات اللي على منتجاته)
-     */
-public function sellerOrders()
-{
-    $sellerId = 1; // مؤقتاً
-    
-    $orders = Order::with(['items.product', 'items.details', 'customer'])
-        ->where('seller_id', $sellerId)
-        ->orderBy('created_at', 'desc')
-        ->paginate(4);
+    public function sellerOrders()
+    {
+        $sellerId = Auth::id();
 
-    return response()->json([
-        'success' => true,
-        'data' => $this->formatOrdersForSeller($orders),
-        'pagination' => [
-            'current_page' => $orders->currentPage(),
-            'last_page' => $orders->lastPage(),
-            'per_page' => $orders->perPage(),
-            'total' => $orders->total(),
-        ],
-    ]);
-}
+        $orders = Order::with(['items.product', 'items.details', 'customer'])
+            ->where('seller_id', $sellerId)
+            ->orderBy('created_at', 'desc')
+            ->paginate(4);
 
-private function formatOrdersForSeller($orders)
-{
-    // إذا كان $orders هو Paginator أو Collection
-    if ($orders instanceof \Illuminate\Pagination\LengthAwarePaginator) {
-        $orders = $orders->getCollection();
+        return response()->json([
+            'success' => true,
+            'data' => $this->formatOrdersForSeller($orders),
+            'pagination' => [
+                'current_page' => $orders->currentPage(),
+                'last_page' => $orders->lastPage(),
+                'per_page' => $orders->perPage(),
+                'total' => $orders->total(),
+            ],
+        ]);
     }
-    
-    return $orders->map(function ($order) {
-        return [
-            'id' => $order->id,
-            'order_number' => $order->order_number,
-            'customer_name' => $order->customer->name ?? 'Unknown',
-            'customer_avatar' => $order->customer->profile_image ?? null,
-            'order_date' => $order->created_at->format('M d, Y - h:i A'),
-            'status' => $order->status,
-            'status_label' => $this->getStatusLabel($order->status),
-            'total_items' => $order->items->sum('quantity'),
-            'total_amount' => $order->total_amount,
-        ];
-    });
-}
 
-    /**
-     * عرض تفاصيل طلب معين
-     */
     public function show($id)
     {
-        // جلب الطلب بدون أي شرط (مؤقتاً للتجريب)
+        $userId = Auth::id();
+
         $order = Order::with(['items.product', 'items.details', 'customer'])
+            ->where(function ($query) use ($userId) {
+                $query->where('customer_id', $userId)
+                    ->orWhere('seller_id', $userId);
+            })
             ->find($id);
 
         if (!$order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order not found',
+                'message' => 'Order not found or access denied',
             ], 404);
         }
 
@@ -95,18 +68,14 @@ private function formatOrdersForSeller($orders)
         ]);
     }
 
-    /**
-     * تحديث حالة الطلب (للبائع فقط)
-     */
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
             'status' => 'required|in:pending,preparing,shipped,delivered,cancelled',
         ]);
 
-        // TODO: بعدين نغير إلى Auth::id()
-        $sellerId = 1; // مؤقتاً artisan@example.com
-        
+        $sellerId = Auth::id();
+
         $order = Order::where('seller_id', $sellerId)->find($id);
 
         if (!$order) {
@@ -131,14 +100,10 @@ private function formatOrdersForSeller($orders)
         ]);
     }
 
-    /**
-     * إلغاء طلب (للمشتري فقط)
-     */
     public function cancel($id)
     {
-        // TODO: بعدين نغير إلى Auth::id()
-        $customerId = 2; // مؤقتاً user101@example.com
-        
+        $customerId = Auth::id();
+
         $order = Order::where('customer_id', $customerId)
             ->whereIn('status', ['pending', 'preparing'])
             ->find($id);
@@ -158,7 +123,35 @@ private function formatOrdersForSeller($orders)
         ]);
     }
 
-    // ==================== Helper Functions ====================
+    public function ordersSummary()
+    {
+        $sellerId = Auth::id();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'new' => Order::where('seller_id', $sellerId)->where('status', 'pending')->count(),
+                'preparing' => Order::where('seller_id', $sellerId)->where('status', 'preparing')->count(),
+                'ready' => Order::where('seller_id', $sellerId)->where('status', 'shipped')->count(),
+                'delivered' => Order::where('seller_id', $sellerId)->where('status', 'delivered')->count(),
+            ],
+        ]);
+    }
+
+    public function getAllSellerOrders()
+    {
+        $sellerId = Auth::id();
+
+        $orders = Order::with(['items.product', 'items.details', 'customer'])
+            ->where('seller_id', $sellerId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->formatOrdersForSeller($orders),
+        ]);
+    }
 
     private function formatOrders($orders)
     {
@@ -177,7 +170,26 @@ private function formatOrdersForSeller($orders)
         });
     }
 
+    private function formatOrdersForSeller($orders)
+    {
+        if ($orders instanceof \Illuminate\Pagination\LengthAwarePaginator) {
+            $orders = $orders->getCollection();
+        }
 
+        return $orders->map(function ($order) {
+            return [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'customer_name' => $order->customer->name ?? 'Unknown',
+                'customer_avatar' => $order->customer->profile_image ?? null,
+                'order_date' => $order->created_at->format('M d, Y - h:i A'),
+                'status' => $order->status,
+                'status_label' => $this->getStatusLabel($order->status),
+                'total_items' => $order->items->sum('quantity'),
+                'total_amount' => $order->total_amount,
+            ];
+        });
+    }
 
     private function formatOrderDetails($order)
     {
@@ -228,7 +240,7 @@ private function formatOrdersForSeller($orders)
 
     private function getStatusLabel($status)
     {
-        return match($status) {
+        return match ($status) {
             'pending' => 'New',
             'preparing' => 'Preparing',
             'shipped' => 'Ready',
@@ -237,40 +249,4 @@ private function formatOrdersForSeller($orders)
             default => ucfirst($status),
         };
     }
-
-    public function ordersSummary()
-{
-    $sellerId = 1; // مؤقتاً
-    
-    $newCount = Order::where('seller_id', $sellerId)->where('status', 'pending')->count();
-    $preparingCount = Order::where('seller_id', $sellerId)->where('status', 'preparing')->count();
-    $readyCount = Order::where('seller_id', $sellerId)->where('status', 'shipped')->count();
-    $deliveredCount = Order::where('seller_id', $sellerId)->where('status', 'delivered')->count();
-    
-    return response()->json([
-        'success' => true,
-        'data' => [
-            'new' => $newCount,
-            'preparing' => $preparingCount,
-            'ready' => $readyCount,
-            'delivered' => $deliveredCount,
-        ],
-    ]);
-}
-
-public function getAllSellerOrders()
-{
-    $sellerId = 1; // مؤقتاً
-    
-    $orders = Order::with(['items.product', 'items.details', 'customer'])
-        ->where('seller_id', $sellerId)
-        ->orderBy('created_at', 'desc')
-        ->get();
-
-    return response()->json([
-        'success' => true,
-        'data' => $this->formatOrdersForSeller($orders),  // ✅ نمرر $orders وليس $orders->items()
-    ]);
-}
-
 }

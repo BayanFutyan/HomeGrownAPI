@@ -15,9 +15,10 @@ class CommentController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-       // /** @var User|null $user */
-        //$user = Auth::user();
-         $user = \App\Models\User::find(1);
+        /** @var User|null $user */
+        $user = Auth::user();
+    
+
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }

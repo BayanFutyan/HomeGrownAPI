@@ -17,11 +17,9 @@ class ProductController extends Controller
      */
     private function getCurrentUser()
     {
-        // مؤقتاً: استخدم المستخدم رقم 1
-        $user = \App\Models\User::find(1);
+        /** @var User|null $user */
+         $user = Auth::user();
         
-        // بعد إضافة Authentication، استخدم:
-        // $user = Auth::user();
         
         return $user;
     }

@@ -5,11 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use App\Enums\UserRoleEnum;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
         'id',
@@ -80,7 +81,7 @@ class User extends Authenticatable
 
     public function isProjectOwner(): bool
     {
-        return $this->role === UserRoleEnum::PROJECT_OWNER;
+        return $this->role === UserRoleEnum::EXHIBITION_OWNER;
     }
 
     public function isNormalUser(): bool

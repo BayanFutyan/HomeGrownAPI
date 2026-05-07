@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # ✅ السماح بالوصول إلى مجلد storage
+    RewriteRule ^storage/.*$ - [L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
