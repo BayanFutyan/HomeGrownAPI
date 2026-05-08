@@ -14,10 +14,11 @@ class ProductDetailController extends Controller
      */
     public function destroy($id): JsonResponse
     {
-        // مؤقتاً للاختبار: استخدم المستخدم رقم 1
-        $user = \App\Models\User::find(1);
+       
         
-        // $user = Auth::user();  // علق هذا السطر مؤقتاً
+         /** @var User|null $user */
+         $user = Auth::user();
+          // علق هذا السطر مؤقتاً
         
         if (!$user) {
             return response()->json(['message' => 'User not found'], 401);
