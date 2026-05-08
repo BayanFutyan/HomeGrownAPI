@@ -80,7 +80,7 @@ class User extends Authenticatable
 
     public function isProjectOwner(): bool
     {
-        return $this->role === UserRoleEnum::PROJECT_OWNER;
+        return $this->role === UserRoleEnum::EXHIBITION_OWNER;
     }
 
     public function isNormalUser(): bool
