@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Helpers\ActivityHelper;  // ✅ أضف هذا
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -58,6 +59,19 @@ class FollowerController extends Controller
             'rating' => $request->rating ?? null,
         ]);
 
+        // ✅ تسجيل نشاط المتابعة
+        $followedUser = User::find($followingId);
+        if ($followedUser && $followedUser->id != $user->id) {
+            ActivityHelper::log(
+                $followedUser->id,     // الشخص اللي تمت متابعته
+                $user->id,             // الشخص اللي قام بالمتابعة
+                'follow',              // نوع النشاط
+                'User',                // نوع الهدف
+                $followingId,          // معرف الهدف
+                $followedUser->name    // عنوان الهدف (اسم المستخدم)
+            );
+        }
+
         return response()->json([
             'message' => 'User followed successfully'
         ], 201);
@@ -81,6 +95,8 @@ class FollowerController extends Controller
         }
 
         $user->following()->detach($id);
+
+        // ملاحظة: لا نقوم بحذف نشاط المتابعة السابق، يبقى في السجل
 
         return response()->json([
             'message' => 'User unfollowed successfully'

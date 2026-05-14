@@ -10,9 +10,9 @@ class Product extends Model
 {
     use HasFactory, SoftDeletes;
 
-    // ============================================================
-    // الأعمدة المسموح بتعبئتها (Mass Assignment)
-    // ============================================================
+    // ✅ إضافة comments_count إلى الـ JSON تلقائياً
+    protected $appends = ['comments_count'];
+
     protected $fillable = [
         'id',
         'seller_id',
@@ -27,9 +27,6 @@ class Product extends Model
         'sales_count',
     ];
 
-    // ============================================================
-    // تحويل أنواع البيانات
-    // ============================================================
     protected $casts = [
         'price' => 'decimal:2',
         'is_sale' => 'boolean',
@@ -37,48 +34,63 @@ class Product extends Model
     ];
 
     // ============================================================
-    // العلاقات (Relationships)
+    // العلاقات
     // ============================================================
 
-    /**
-     * الحرفي (صاحب المنتج)
-     */
     public function seller()
     {
         return $this->belongsTo(User::class, 'seller_id');
     }
 
     /**
-     * العرض الخاص بالمنتج (واحد لواحد)
+     * العروض (كل العروض - تاريخية)
+     */
+    public function offers()
+    {
+        return $this->hasMany(Offer::class);
+    }
+
+    /**
+     * العرض النشط الحالي (واحد فقط)
+     * ✅ هذا يحافظ على التوافق مع الكود القديم
      */
     public function offer()
     {
-        return $this->hasOne(Offer::class);
+        return $this->hasOne(Offer::class)->where('end_date', '>=', now());
     }
 
-    /**
-     * التعليقات على المنتج
-     */
+    public function likes()
+    {
+        return $this->morphMany(Like::class, 'likeable');
+    }
+
     public function comments()
     {
-        return $this->hasMany(Comment::class);
+        return $this->morphMany(Comment::class, 'commentable');
     }
 
-    /**
-     * التفاصيل الإضافية للمنتج
-     */
     public function details()
     {
         return $this->hasMany(ProductDetail::class);
     }
 
+    public function saves()
+    {
+        return $this->morphMany(Save::class, 'saveable');
+    }
+
     // ============================================================
-    // دوال مساعدة (Accessors & Mutators)
+    // دوال مساعدة (Accessors)
     // ============================================================
 
     /**
-     * حساب السعر بعد الخصم
+     * ✅ عدد التعليقات (يضاف تلقائياً في الـ JSON)
      */
+    public function getCommentsCountAttribute()
+    {
+        return $this->comments()->count();
+    }
+
     public function getDiscountedPriceAttribute()
     {
         if ($this->offer && $this->offer->discount_value) {
@@ -87,50 +99,37 @@ class Product extends Model
         return $this->price;
     }
 
-    /**
-     * هل المنتج عليه عرض فعال؟
-     */
     public function getHasActiveOfferAttribute()
     {
-        if (!$this->offer) return false;
-        
-        $now = now();
-        return $this->offer->start_date <= $now && $this->offer->end_date >= $now;
+        return $this->offer !== null;
     }
 
-    // ============================================================
-    // ✅ دوال جديدة لتحديث حالة is_sale تلقائياً
-    // ============================================================
-
-    /**
-     * تحديث حالة is_sale تلقائياً بناءً على العرض النشط
-     */
     public function updateSaleStatus(): void
     {
-        $hasActiveOffer = $this->offer()
-            ->where('end_date', '>=', now())
-            ->exists();
+        $hasActiveOffer = $this->offer()->exists();
         
         if ($this->is_sale != $hasActiveOffer) {
             $this->update(['is_sale' => $hasActiveOffer]);
         }
     }
 
-    /**
-     * الحصول على العرض النشط فقط (الذي لم ينتهِ)
-     */
     public function getActiveOffer()
     {
-        return $this->offer()
-            ->where('end_date', '>=', now())
-            ->first();
+        return $this->offer;
     }
 
-    /**
-     * التحقق من وجود عرض نشط
-     */
     public function hasActiveOffer(): bool
     {
-        return $this->getActiveOffer() !== null;
+        return $this->offer !== null;
+    }
+
+    public function isLikedByUser($userId)
+    {
+        return $this->likes()->where('user_id', $userId)->exists();
+    }
+
+    public function isSavedByUser($userId): bool
+    {
+        return $this->saves()->where('user_id', $userId)->exists();
     }
 }

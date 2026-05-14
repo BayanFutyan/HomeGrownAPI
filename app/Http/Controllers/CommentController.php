@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Comment;
+use App\Models\Product;
+use App\Models\Post;
+use App\Helpers\ActivityHelper;  // ✅ أضف هذا
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -17,25 +20,74 @@ class CommentController extends Controller
     {
         /** @var User|null $user */
         $user = Auth::user();
-    
 
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
 
         $request->validate([
-            'product_id' => 'required|exists:products,id',
+            'product_id' => 'nullable|exists:products,id',
+            'post_id' => 'nullable|exists:posts,id',
             'comment' => 'required|string',
             'parent_id' => 'nullable|exists:comments,id',
         ]);
 
+        // تحديد نوع التعليق (على منتج أو منشور)
+        $commentableType = null;
+        $commentableId = null;
+        $targetTitle = null;
+
+        if ($request->has('product_id') && $request->product_id) {
+            $commentableType = 'App\\Models\\Product';
+            $commentableId = $request->product_id;
+            $product = Product::find($commentableId);
+            $targetTitle = $product?->name;
+        } elseif ($request->has('post_id') && $request->post_id) {
+            $commentableType = 'App\\Models\\Post';
+            $commentableId = $request->post_id;
+            $post = Post::find($commentableId);
+            $targetTitle = $post ? substr($post->content, 0, 50) : null;
+        } else {
+            return response()->json(['message' => 'Either product_id or post_id is required'], 422);
+        }
+
         $comment = Comment::create([
-            'product_id' => $request->product_id,
+            'commentable_type' => $commentableType,
+            'commentable_id' => $commentableId,
             'user_id' => $user->id,
             'comment' => $request->comment,
             'parent_id' => $request->parent_id,
             'likes_count' => 0,
         ]);
+
+        // ✅ تسجيل نشاط التعليق
+        $targetUserId = null;
+        $activityType = null;
+
+        if ($commentableType === 'App\\Models\\Product') {
+            $product = Product::find($commentableId);
+            if ($product && $product->seller_id != $user->id) {
+                $targetUserId = $product->seller_id;
+                $activityType = 'comment_product';
+            }
+        } elseif ($commentableType === 'App\\Models\\Post') {
+            $post = Post::find($commentableId);
+            if ($post && $post->user_id != $user->id) {
+                $targetUserId = $post->user_id;
+                $activityType = 'comment_post';
+            }
+        }
+
+        if ($targetUserId && $activityType) {
+            ActivityHelper::log(
+                $targetUserId,      // صاحب المحتوى
+                $user->id,          // الشخص اللي كتب التعليق
+                $activityType,      // نوع النشاط
+                $commentableType === 'App\\Models\\Product' ? 'Product' : 'Post',
+                $commentableId,
+                $targetTitle
+            );
+        }
 
         return response()->json([
             'data' => $comment->load('user'),
@@ -65,6 +117,17 @@ class CommentController extends Controller
             return response()->json(['message' => 'You can only delete your own comments'], 403);
         }
 
+        // ✅ قبل الحذف، نقص عدد التعليقات إذا كان على منشور
+        if ($comment->commentable_type === 'App\\Models\\Post') {
+            $post = Post::find($comment->commentable_id);
+            if ($post) {
+                $post->decrement('comments_count');
+            }
+        } elseif ($comment->commentable_type === 'App\\Models\\Product') {
+            // إذا كان على منتج، نقدر ننقص Product comments_count إذا وجد
+            // Product::where('id', $comment->commentable_id)->decrement('comments_count');
+        }
+
         $comment->delete();
 
         return response()->json([
@@ -72,35 +135,56 @@ class CommentController extends Controller
         ]);
     }
 
-
+    /**
+     * Toggle like on a comment
+     */
     public function toggleLike($id)
-{
-    $user = \App\Models\User::find(1); // مؤقتاً
-    $comment = Comment::find($id);
-    
-    if (!$comment) {
-        return response()->json(['message' => 'Comment not found'], 404);
+    {
+        $user = Auth::user();
+        
+        if (!$user) {
+            return response()->json(['message' => 'Please login first'], 401);
+        }
+        
+        $comment = Comment::find($id);
+        
+        if (!$comment) {
+            return response()->json(['message' => 'Comment not found'], 404);
+        }
+        
+        $isLiked = false;
+        
+        // التبديل بين 0 و 1
+        if ($comment->likes_count == 1) {
+            $comment->update(['likes_count' => 0]);
+            $isLiked = false;
+        } else {
+            $comment->update(['likes_count' => 1]);
+            $isLiked = true;
+            
+            // ✅ تسجيل نشاط الإعجاب بالتعليق
+            $targetUserId = null;
+            $activityType = null;
+            
+            if ($comment->user_id != $user->id) {
+                $targetUserId = $comment->user_id;
+                $activityType = 'like_comment';
+                
+                ActivityHelper::log(
+                    $targetUserId,
+                    $user->id,
+                    $activityType,
+                    'Comment',
+                    $comment->id,
+                    substr($comment->comment, 0, 50)
+                );
+            }
+        }
+        
+        return response()->json([
+            'message' => $isLiked ? 'Like added' : 'Like removed',
+            'likes_count' => $comment->likes_count,
+            'is_liked' => $isLiked
+        ]);
     }
-    
-    $product = $comment->product;
-    
-    // فقط صاحب المنتج يمكنه الإعجاب
-    if ($product->seller_id != $user->id) {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-    
-    // تبديل حالة الإعجاب
-    if ($comment->likes_count == 1) {
-        $comment->update(['likes_count' => 0]);
-        $liked = false;
-    } else {
-        $comment->update(['likes_count' => 1]);
-        $liked = true;
-    }
-    
-    return response()->json([
-        'liked' => $liked,
-        'likes_count' => $comment->likes_count
-    ]);
-}
 }

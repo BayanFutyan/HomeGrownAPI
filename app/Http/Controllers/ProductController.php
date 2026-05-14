@@ -13,19 +13,15 @@ use Illuminate\Support\Facades\Log;
 class ProductController extends Controller
 {
     /**
-     * Get current user (temporary for testing)
+     * Get current user
      */
     private function getCurrentUser()
     {
-        /** @var User|null $user */
-         $user = Auth::user();
-        
-        
-        return $user;
+        return Auth::user();
     }
 
     /**
-     * Upload image to storage
+     * Upload image to public/images/products
      */
     private function uploadImage($imageFile)
     {
@@ -33,9 +29,10 @@ class ProductController extends Controller
         
         try {
             $fileName = time() . '_' . uniqid() . '.' . $imageFile->getClientOriginalExtension();
-            $path = $imageFile->storeAs('products', $fileName, 'public');
+            // ✅ حفظ في public/images/products
+            $imageFile->move(public_path('images/products'), $fileName);
             
-            return 'storage/' . $path;
+            return 'images/products/' . $fileName;
         } catch (\Exception $e) {
             Log::error('Image upload failed: ' . $e->getMessage());
             return null;
@@ -48,7 +45,7 @@ class ProductController extends Controller
     private function uploadBase64Image($base64String)
     {
         try {
-            // إزالة البيانات الوصفية من Base64 (data:image/jpeg;base64,)
+            // إزالة البيانات الوصفية من Base64
             $imageData = preg_replace('#^data:image/\w+;base64,#i', '', $base64String);
             $imageData = str_replace(' ', '+', $imageData);
             $decodedImage = base64_decode($imageData);
@@ -58,7 +55,7 @@ class ProductController extends Controller
                 return null;
             }
             
-            // تحديد نوع الصورة من الـ Base64
+            // تحديد نوع الصورة
             $finfo = finfo_open(FILEINFO_MIME_TYPE);
             $mimeType = finfo_buffer($finfo, $decodedImage);
             finfo_close($finfo);
@@ -72,13 +69,13 @@ class ProductController extends Controller
             };
             
             $fileName = time() . '_' . uniqid() . '.' . $extension;
-            $path = 'products/' . $fileName;
             
-            Storage::disk('public')->put($path, $decodedImage);
+            // ✅ حفظ في public/images/products
+            file_put_contents(public_path('images/products/' . $fileName), $decodedImage);
             
-            Log::info('Base64 image saved: ' . $path);
+            Log::info('Base64 image saved: images/products/' . $fileName);
             
-            return 'storage/' . $path;
+            return 'images/products/' . $fileName;
         } catch (\Exception $e) {
             Log::error('Base64 image upload failed: ' . $e->getMessage());
             return null;
@@ -102,24 +99,22 @@ class ProductController extends Controller
             ]);
         }
         
-        if (!$user->isArtisan()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+        if ($user->role?->value !== 'artisan') {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
         
         $query = Product::where('seller_id', $user->id);
         
-        // جلب العروض النشطة فقط
         $query->with(['offer' => function($q) {
             $q->where('end_date', '>=', now());
         }]);
         
-        // 1. فلترة البحث (Search)
+        // فلترة البحث
         if ($request->has('search') && $request->search) {
-            $search = $request->search;
-            $query->where('name', 'like', '%' . $search . '%');
+            $query->where('name', 'like', '%' . $request->search . '%');
         }
         
-        // 2. فلترة الحالة (Status Filter)
+        // فلترة الحالة
         if ($request->has('status') && $request->status != 'All Status') {
             switch ($request->status) {
                 case 'On Sale':
@@ -137,7 +132,7 @@ class ProductController extends Controller
             }
         }
         
-        // 3. ترتيب المنتجات (Sort Filter)
+        // ترتيب المنتجات
         if ($request->has('sort') && $request->sort != 'Newest') {
             switch ($request->sort) {
                 case 'Top Selling':
@@ -168,7 +163,7 @@ class ProductController extends Controller
     }
     
     /**
-     * Store a newly created product (يدعم الصورة و Base64)
+     * Store a newly created product
      */
     public function store(Request $request)
     {
@@ -190,16 +185,11 @@ class ProductController extends Controller
         
         $imagePath = null;
         
-        // 1. رفع صورة عادية (من Postman أو Mobile Multipart)
         if ($request->hasFile('image')) {
             $imagePath = $this->uploadImage($request->file('image'));
-        }
-        // 2. رفع صورة Base64 (من Flutter Web/Mobile)
-        else if ($request->image_base64) {
+        } else if ($request->image_base64) {
             $imagePath = $this->uploadBase64Image($request->image_base64);
-        }
-        // 3. رابط صورة خارجي
-        else if ($request->image_url) {
+        } else if ($request->image_url) {
             $imagePath = $request->image_url;
         }
         
@@ -250,7 +240,7 @@ class ProductController extends Controller
      */
     public function update(Request $request, $id)
     {
-        Log::info('Update product request', ['id' => $id, 'data' => $request->all()]);
+        Log::info('Update product request', ['id' => $id]);
         
         $user = $this->getCurrentUser();
         $product = Product::find($id);
@@ -273,13 +263,15 @@ class ProductController extends Controller
         
         // معالجة الصورة
         if ($request->hasFile('image')) {
-            if ($product->image && Storage::disk('public')->exists(str_replace('storage/', '', $product->image))) {
-                Storage::disk('public')->delete(str_replace('storage/', '', $product->image));
+            // حذف الصورة القديمة
+            if ($product->image && file_exists(public_path($product->image))) {
+                unlink(public_path($product->image));
             }
             $data['image'] = $this->uploadImage($request->file('image'));
         } else if ($request->image_base64) {
-            if ($product->image && Storage::disk('public')->exists(str_replace('storage/', '', $product->image))) {
-                Storage::disk('public')->delete(str_replace('storage/', '', $product->image));
+            // حذف الصورة القديمة
+            if ($product->image && file_exists(public_path($product->image))) {
+                unlink(public_path($product->image));
             }
             $data['image'] = $this->uploadBase64Image($request->image_base64);
         } else if ($request->image_url) {
@@ -386,7 +378,7 @@ class ProductController extends Controller
         
         $discountedPrice = $product->price - ($product->price * $request->discount_value / 100);
         
-        $offer = Offer::updateOrCreate(
+        Offer::updateOrCreate(
             ['product_id' => $id],
             [
                 'discount_value' => $request->discount_value,
@@ -440,7 +432,7 @@ class ProductController extends Controller
     }
     
     /**
-     * Get product details (product_details table)
+     * Get product details
      */
     public function getDetails($id)
     {
@@ -523,10 +515,8 @@ class ProductController extends Controller
             'details.*.detail_value' => 'required|string',
         ]);
         
-        // Delete old details
         $product->details()->delete();
         
-        // Add new details
         foreach ($request->details as $detail) {
             $product->details()->create($detail);
         }
@@ -548,7 +538,6 @@ class ProductController extends Controller
             return response()->json(['message' => 'Product not found'], 404);
         }
         
-        // جلب جميع التعليقات مع المستخدم
         $comments = $product->comments()->with('user')->get();
         
         return response()->json([

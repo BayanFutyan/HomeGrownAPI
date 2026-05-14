@@ -19,6 +19,7 @@ use App\Http\Controllers\ExhibitionRegistrationController;
 | Auth Routes
 |--------------------------------------------------------------------------
 */
+
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
 
@@ -27,7 +28,6 @@ Route::post('/login', [UserController::class, 'login']);
 | Public Routes
 |--------------------------------------------------------------------------
 */
-// هون خلي بس الأشياء اللي المستخدم العادي بقدر يشوفها بدون login
 Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::get('/products/{id}/details', [ProductController::class, 'getDetails']);
 Route::get('/products/{id}/comments', [ProductController::class, 'getComments']);
@@ -69,6 +69,65 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Customer Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('customer')->group(function () {
+
+        // المنتجات
+        Route::get('/products', [\App\Http\Controllers\Customer\ProductController::class, 'index']);
+        Route::get('/products/{id}', [\App\Http\Controllers\Customer\ProductController::class, 'show']);
+        Route::get('/products/{id}/details', [\App\Http\Controllers\Customer\ProductController::class, 'details']);
+
+        // الإعجابات (Likes)
+        Route::post('/like', [\App\Http\Controllers\Customer\LikeController::class, 'store']);
+        Route::delete('/like/{likeId}', [\App\Http\Controllers\Customer\LikeController::class, 'destroy']);
+        Route::get('/my-likes', [\App\Http\Controllers\Customer\LikeController::class, 'myLikes']);
+        Route::post('/check-like', [\App\Http\Controllers\Customer\LikeController::class, 'check']);
+
+        // Posts - عرض
+        Route::get('/posts', [\App\Http\Controllers\Customer\PostController::class, 'index']);
+        Route::get('/posts/{id}', [\App\Http\Controllers\Customer\PostController::class, 'show']);
+
+        // Posts - إنشاء، تعديل، حذف (للمستخدم العادي)
+        Route::post('/posts', [\App\Http\Controllers\Customer\PostController::class, 'store']);
+        Route::put('/posts/{id}', [\App\Http\Controllers\Customer\PostController::class, 'update']);
+        Route::delete('/posts/{id}', [\App\Http\Controllers\Customer\PostController::class, 'destroy']);
+
+        // Posts - منشورات مستخدم معين (للبروفايل)
+        Route::get('/users/{userId}/posts', [\App\Http\Controllers\Customer\PostController::class, 'getUserPosts']);
+
+        // Posts - إعجابات
+        Route::post('/posts/{id}/like', [\App\Http\Controllers\Customer\PostController::class, 'like']);
+        Route::delete('/posts/{id}/like', [\App\Http\Controllers\Customer\PostController::class, 'unlike']);
+
+        // Comments on Posts
+        Route::post('/posts/{id}/comments', [\App\Http\Controllers\Customer\PostController::class, 'addComment']);
+        Route::get('/posts/{id}/comments', [\App\Http\Controllers\Customer\PostController::class, 'getComments']);
+        Route::delete('/posts/comments/{commentId}', [\App\Http\Controllers\Customer\PostController::class, 'deleteComment']);
+
+        // Stories
+        Route::get('/stories', [\App\Http\Controllers\Customer\StoryController::class, 'index']);
+        Route::get('/stories/{id}', [\App\Http\Controllers\Customer\StoryController::class, 'show']);
+        Route::post('/stories/{id}/view', [\App\Http\Controllers\Customer\StoryController::class, 'view']);
+
+
+        // Activity
+        Route::get('/activities', [\App\Http\Controllers\Customer\ActivityController::class, 'index']);
+        Route::post('/activities/{id}/read', [\App\Http\Controllers\Customer\ActivityController::class, 'markAsRead']);
+        Route::post('/activities/read-all', [\App\Http\Controllers\Customer\ActivityController::class, 'markAllAsRead']);
+
+
+        // Saves (حفظ المحتوى)
+Route::post('/save', [\App\Http\Controllers\Customer\SaveController::class, 'store']);
+Route::delete('/save/{saveId}', [\App\Http\Controllers\Customer\SaveController::class, 'destroy']);
+Route::get('/my-saves', [\App\Http\Controllers\Customer\SaveController::class, 'mySaves']);
+Route::post('/check-save', [\App\Http\Controllers\Customer\SaveController::class, 'check']);
+Route::post('/save-count', [\App\Http\Controllers\Customer\SaveController::class, 'count']);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
     | Exhibition Routes
     |--------------------------------------------------------------------------
     */
@@ -107,7 +166,6 @@ Route::middleware('auth:sanctum')->group(function () {
 */
 Route::middleware(['auth:sanctum', 'role:artisan'])->group(function () {
 
-    // منتجات البائع الحالي فقط
     Route::get('/products', [ProductController::class, 'index']);
 
     Route::post('/products', [ProductController::class, 'store']);

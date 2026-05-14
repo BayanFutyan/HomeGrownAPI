@@ -9,21 +9,15 @@ class Comment extends Model
 {
     use HasFactory;
 
-    // ============================================================
-    // الأعمدة المسموح بتعبئتها
-    // ============================================================
     protected $fillable = [
-        'id',
-        'product_id',
+        'commentable_type',
+        'commentable_id', 
         'user_id',
         'comment',
         'parent_id',
         'likes_count',
     ];
 
-    // ============================================================
-    // تحويل أنواع البيانات
-    // ============================================================
     protected $casts = [
         'likes_count' => 'integer',
     ];
@@ -33,11 +27,20 @@ class Comment extends Model
     // ============================================================
 
     /**
-     * المنتج المرتبط بهذا التعليق
+     * العلاقة مع المنتج (طريقة قديمة)
      */
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * ✅ العلاقة متعددة الأشكال (للتعليقات على المنتجات والمنشورات)
+     * هذه العلاقة المطلوبة لـ morphMany في Product و Post
+     */
+    public function commentable()
+    {
+        return $this->morphTo();
     }
 
     /**
