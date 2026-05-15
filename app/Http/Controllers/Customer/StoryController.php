@@ -9,13 +9,26 @@ use Illuminate\Http\Request;
 
 class StoryController extends Controller
 {
-    /**
-     * جلب كل القصص النشطة للمستخدم
-     */
+    private function imageUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http')) {
+            return str_replace('/storage/images/', '/images/', $path);
+        }
+
+        $path = ltrim($path, '/');
+        $path = str_replace('storage/images/', 'images/', $path);
+
+        return url($path);
+    }
+
     public function index(Request $request)
     {
         $userId = $request->user()->id;
-        
+
         $stories = Story::with('user')
             ->where('is_active', true)
             ->where('expires_at', '>', now())
@@ -25,39 +38,36 @@ class StoryController extends Controller
                 return [
                     'id' => $story->id,
                     'user_id' => $story->user_id,
-                    'user_name' => $story->user->name,
-                    'user_image' => $story->user->profile_image,
-                    'image' => $story->image,
+                    'user_name' => $story->user?->name ?? 'User',
+                    'user_image' => $this->imageUrl($story->user?->profile_image),
+                    'image' => $this->imageUrl($story->image),
                     'caption' => $story->caption,
                     'is_viewed' => $story->isViewedByUser($userId),
                     'views_count' => $story->views_count,
                     'created_at' => $story->created_at->diffForHumans(),
                 ];
             });
-        
+
         return response()->json([
             'data' => $stories,
             'message' => 'Stories retrieved successfully'
         ]);
     }
 
-    /**
-     * عرض قصة محددة
-     */
     public function show($id, Request $request)
     {
         $story = Story::with('user')
             ->where('is_active', true)
             ->where('expires_at', '>', now())
             ->findOrFail($id);
-        
+
         return response()->json([
             'data' => [
                 'id' => $story->id,
                 'user_id' => $story->user_id,
-                'user_name' => $story->user->name,
-                'user_image' => $story->user->profile_image,
-                'image' => $story->image,
+                'user_name' => $story->user?->name ?? 'User',
+                'user_image' => $this->imageUrl($story->user?->profile_image),
+                'image' => $this->imageUrl($story->image),
                 'caption' => $story->caption,
                 'created_at' => $story->created_at->diffForHumans(),
             ],
@@ -65,24 +75,19 @@ class StoryController extends Controller
         ]);
     }
 
-    /**
-     * تسجيل مشاهدة قصة
-     */
     public function view(Request $request, $id)
     {
         $story = Story::findOrFail($id);
         $userId = $request->user()->id;
-        
-        // تأكد إن القصة لسا فعالة
+
         if ($story->expires_at->isPast()) {
             return response()->json(['message' => 'Story has expired'], 400);
         }
-        
-        // تأكد إن المستخدم ما شاف القصة قبل كذا
+
         $existingView = StoryView::where('story_id', $id)
             ->where('viewer_id', $userId)
             ->exists();
-        
+
         if (!$existingView) {
             StoryView::create([
                 'story_id' => $id,
@@ -90,7 +95,7 @@ class StoryController extends Controller
                 'viewed_at' => now(),
             ]);
         }
-        
+
         return response()->json([
             'message' => 'Story viewed successfully',
             'views_count' => $story->views()->count()
