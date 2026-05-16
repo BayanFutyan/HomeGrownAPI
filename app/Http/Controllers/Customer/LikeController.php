@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Like;
 use App\Models\Product;
 use App\Models\Post;
-use App\Helpers\ActivityHelper;  // ✅ أضف هذا
+use App\Helpers\ActivityHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class LikeController extends Controller
 {
@@ -18,12 +19,19 @@ class LikeController extends Controller
     {
         $request->validate([
             'likeable_type' => 'required|string',
-            'likeable_id' => 'required|integer|exists:products,id',
+            'likeable_id' => 'required|integer',
         ]);
         
         $userId = $request->user()->id;
         $likeableType = $request->likeable_type;
         $likeableId = $request->likeable_id;
+        
+        // ✅ تحويل القيمة إلى الصيغة الصحيحة
+        if ($likeableType === 'product') {
+            $likeableType = 'App\\Models\\Product';
+        } elseif ($likeableType === 'post') {
+            $likeableType = 'App\\Models\\Post';
+        }
         
         // التحقق من وجود الإعجاب مسبقاً
         $existing = Like::where('user_id', $userId)
@@ -41,36 +49,42 @@ class LikeController extends Controller
             'likeable_id' => $likeableId,
         ]);
         
-        // تحديث عدد الإعجابات في جدول المنتج
+        // ✅ تحديث عدد الإعجابات في جدول المنتج
         if ($likeableType === 'App\\Models\\Product') {
-            $count = Like::where('likeable_type', $likeableType)
-                ->where('likeable_id', $likeableId)
-                ->count();
-            Product::where('id', $likeableId)->update(['likes_count' => $count]);
+            $product = Product::find($likeableId);
+            if ($product) {
+                $newCount = $product->likes()->count();
+                $product->likes_count = $newCount;
+                $product->save();
+                
+                Log::info('Product likes updated', [
+                    'product_id' => $likeableId,
+                    'new_count' => $newCount
+                ]);
+            }
             
-            // ✅ تسجيل نشاط: إعجاب بمنتج
+            // ✅ تسجيل نشاط
             $product = Product::find($likeableId);
             if ($product && $product->seller_id != $userId) {
                 ActivityHelper::log(
-                    $product->seller_id,      // صاحب المنتج
-                    $userId,                   // الشخص اللي عمل الإعجاب
-                    'like_product',            // نوع النشاط
-                    'Product',                 // نوع الهدف
-                    $likeableId,               // معرف الهدف
-                    $product->name             // عنوان الهدف
+                    $product->seller_id,
+                    $userId,
+                    'like_product',
+                    'Product',
+                    $likeableId,
+                    $product->name
                 );
             }
         } elseif ($likeableType === 'App\\Models\\Post') {
-            // ✅ تسجيل نشاط: إعجاب بمنشور
             $post = Post::find($likeableId);
             if ($post && $post->user_id != $userId) {
                 ActivityHelper::log(
-                    $post->user_id,            // صاحب المنشور
-                    $userId,                   // الشخص اللي عمل الإعجاب
-                    'like_post',               // نوع النشاط
-                    'Post',                    // نوع الهدف
-                    $likeableId,               // معرف الهدف
-                    substr($post->content, 0, 50)  // عنوان الهدف (أول 50 حرف)
+                    $post->user_id,
+                    $userId,
+                    'like_post',
+                    'Post',
+                    $likeableId,
+                    substr($post->content, 0, 50)
                 );
             }
         }
@@ -84,39 +98,41 @@ class LikeController extends Controller
     /**
      * حذف إعجاب
      */
-    public function destroy(Request $request, $likeId)
+    public function destroy(Request $request)
     {
-        $like = Like::where('user_id', $request->user()->id)
-            ->where('id', $likeId)
-            ->firstOrFail();
+        $request->validate([
+            'likeable_type' => 'required|string',
+            'likeable_id' => 'required|integer',
+        ]);
+
+        $likeableType = $request->likeable_type;
+        $likeableId = $request->likeable_id;
         
-        $likeableType = $like->likeable_type;
-        $likeableId = $like->likeable_id;
-        
-        $like->delete();
-        
-        // تحديث عدد الإعجابات
-        if ($likeableType === 'App\\Models\\Product') {
-            $count = Like::where('likeable_type', $likeableType)
-                ->where('likeable_id', $likeableId)
-                ->count();
-            Product::where('id', $likeableId)->update(['likes_count' => $count]);
+        // ✅ تحويل القيمة إلى الصيغة الصحيحة للبحث
+        if ($likeableType === 'product') {
+            $likeableType = 'App\\Models\\Product';
+        } elseif ($likeableType === 'post') {
+            $likeableType = 'App\\Models\\Post';
         }
-        
+
+        $like = Like::where('user_id', $request->user()->id)
+            ->where('likeable_type', $likeableType)
+            ->where('likeable_id', $likeableId)
+            ->firstOrFail();
+
+        $like->delete();
+
+        // ✅ تحديث عدد الإعجابات
+        if ($likeableType === 'App\\Models\\Product') {
+            $product = Product::find($likeableId);
+            if ($product) {
+                $newCount = $product->likes()->count();
+                $product->likes_count = $newCount;
+                $product->save();
+            }
+        }
+
         return response()->json(['message' => 'تم إلغاء الإعجاب بنجاح']);
-    }
-    
-    /**
-     * عرض إعجاباتي
-     */
-    public function myLikes(Request $request)
-    {
-        $likes = Like::where('user_id', $request->user()->id)
-            ->with('likeable')
-            ->latest()
-            ->paginate($request->per_page ?? 15);
-        
-        return response()->json($likes);
     }
     
     /**
@@ -129,11 +145,23 @@ class LikeController extends Controller
             'likeable_id' => 'required|integer',
         ]);
         
-        $exists = Like::where('user_id', $request->user()->id)
-            ->where('likeable_type', $request->likeable_type)
-            ->where('likeable_id', $request->likeable_id)
-            ->exists();
+        $likeableType = $request->likeable_type;
         
-        return response()->json(['is_liked' => $exists]);
+        // ✅ تحويل القيمة إلى الصيغة الصحيحة للبحث
+        if ($likeableType === 'product') {
+            $likeableType = 'App\\Models\\Product';
+        } elseif ($likeableType === 'post') {
+            $likeableType = 'App\\Models\\Post';
+        }
+        
+        $like = Like::where('user_id', $request->user()->id)
+            ->where('likeable_type', $likeableType)
+            ->where('likeable_id', $request->likeable_id)
+            ->first();
+        
+        return response()->json([
+            'is_liked' => $like !== null,
+            'like_id' => $like?->id
+        ]);
     }
 }

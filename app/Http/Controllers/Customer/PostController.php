@@ -8,6 +8,7 @@ use App\Models\Like;
 use App\Models\Comment;
 use App\Http\Resources\PostResource;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PostController extends Controller
 {
@@ -190,31 +191,40 @@ class PostController extends Controller
     /**
      * إضافة تعليق على منشور
      */
-    public function addComment(Request $request, $id)
-    {
-        $post = Post::findOrFail($id);
-        
-        $request->validate([
-            'comment' => 'required|string|min:2',
-            'parent_id' => 'nullable|exists:comments,id',
-        ]);
-        
-        $comment = Comment::create([
-            'commentable_type' => 'App\\Models\\Post',
-            'commentable_id' => $id,
-            'user_id' => $request->user()->id,
-            'comment' => $request->comment,
-            'parent_id' => $request->parent_id ?? null,
-            'likes_count' => 0,
-        ]);
-        
-        $post->increment('comments_count');
-        
-        return response()->json([
-            'message' => 'Comment added successfully',
-            'comment' => $comment->load('user')
-        ], 201);
-    }
+public function addComment(Request $request, $id)
+{
+    $post = Post::findOrFail($id);
+    
+    $request->validate([
+        'comment' => 'required|string|min:2',
+        'parent_id' => 'nullable|exists:comments,id',
+    ]);
+    
+    $comment = Comment::create([
+        'commentable_type' => 'App\\Models\\Post',
+        'commentable_id' => $id,
+        'user_id' => $request->user()->id,
+        'comment' => $request->comment,
+        'parent_id' => $request->parent_id ?? null,
+        'likes_count' => 0,
+    ]);
+    
+    // ✅ هذا السطر يجب أن يكون موجوداً
+    $post->increment('comments_count');
+    
+    // ✅ تأكد من أن التحديث تم
+    Log::info('Post comments_count updated', [
+        'post_id' => $id,
+        'new_count' => $post->fresh()->comments_count
+    ]);
+    
+    $comment->load('user');
+    
+    return response()->json([
+        'message' => 'Comment added successfully',
+        'comment' => $comment
+    ], 201);
+}
 
     /**
      * جلب تعليقات منشور

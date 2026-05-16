@@ -74,6 +74,12 @@ Route::middleware('auth:sanctum')->group(function () {
     */
     Route::prefix('customer')->group(function () {
 
+        Route::get('/my-stories', [\App\Http\Controllers\Customer\StoryController::class, 'myStories']);
+        Route::get('/stories/{id}/views', [\App\Http\Controllers\Customer\StoryController::class, 'views']);
+        Route::delete('/stories/{id}', [\App\Http\Controllers\Customer\StoryController::class, 'destroy']);
+
+        Route::post('/stories', [\App\Http\Controllers\Customer\StoryController::class, 'store']);
+        Route::get('/artisans/search', [UserController::class, 'searchArtisans']);
         // المنتجات
         Route::get('/products', [\App\Http\Controllers\Customer\ProductController::class, 'index']);
         Route::get('/products/{id}', [\App\Http\Controllers\Customer\ProductController::class, 'show']);
@@ -81,7 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // الإعجابات (Likes)
         Route::post('/like', [\App\Http\Controllers\Customer\LikeController::class, 'store']);
-        Route::delete('/like/{likeId}', [\App\Http\Controllers\Customer\LikeController::class, 'destroy']);
+        Route::delete('/like', [\App\Http\Controllers\Customer\LikeController::class, 'destroy']);
         Route::get('/my-likes', [\App\Http\Controllers\Customer\LikeController::class, 'myLikes']);
         Route::post('/check-like', [\App\Http\Controllers\Customer\LikeController::class, 'check']);
 
@@ -119,11 +125,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
         // Saves (حفظ المحتوى)
-Route::post('/save', [\App\Http\Controllers\Customer\SaveController::class, 'store']);
-Route::delete('/save/{saveId}', [\App\Http\Controllers\Customer\SaveController::class, 'destroy']);
-Route::get('/my-saves', [\App\Http\Controllers\Customer\SaveController::class, 'mySaves']);
-Route::post('/check-save', [\App\Http\Controllers\Customer\SaveController::class, 'check']);
-Route::post('/save-count', [\App\Http\Controllers\Customer\SaveController::class, 'count']);
+        Route::post('/save', [\App\Http\Controllers\Customer\SaveController::class, 'store']);
+        Route::delete('/save/{saveId}', [\App\Http\Controllers\Customer\SaveController::class, 'destroy']);
+        Route::get('/my-saves', [\App\Http\Controllers\Customer\SaveController::class, 'mySaves']);
+        Route::post('/check-save', [\App\Http\Controllers\Customer\SaveController::class, 'check']);
+        Route::post('/save-count', [\App\Http\Controllers\Customer\SaveController::class, 'count']);
     });
 
     /*

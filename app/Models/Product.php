@@ -132,4 +132,32 @@ class Product extends Model
     {
         return $this->saves()->where('user_id', $userId)->exists();
     }
+
+        // ============================================================
+    // ✅ أحداث النموذج (Model Events) لتحديث likes_count تلقائياً
+    // ============================================================
+
+    /**
+     * تحديث عدد الإعجابات في جدول المنتجات
+     */
+    public function updateLikesCount()
+    {
+        $count = $this->likes()->count();
+        $this->timestamps = false; // لمنع تحديث updated_at
+        $this->update(['likes_count' => $count]);
+        $this->timestamps = true;
+    }
+
+    /**
+     * Boot the model
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // عند إضافة Like جديد
+        static::created(function ($product) {
+            // لا نحتاج لهذا
+        });
+    }
 }

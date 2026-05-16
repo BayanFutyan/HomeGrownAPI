@@ -209,4 +209,43 @@ public function profile(): JsonResponse
             'message' => 'Following retrieved successfully'
         ]);
     }
+
+    public function searchArtisans(Request $request): JsonResponse
+{
+    $search = $request->query('search');
+
+    $query = User::where('role', UserRoleEnum::ARTISAN);
+
+    if ($search) {
+        $query->where(function ($q) use ($search) {
+            $q->where('name', 'like', '%' . $search . '%')
+              ->orWhere('bio', 'like', '%' . $search . '%')
+              ->orWhere('address', 'like', '%' . $search . '%');
+        });
+    }
+
+    $artisans = $query->limit(10)->get()->map(function ($artisan) {
+        return [
+            'id' => $artisan->id,
+            'name' => $artisan->name,
+            'email' => $artisan->email,
+            'phone' => $artisan->phone,
+            'address' => $artisan->address,
+            'bio' => $artisan->bio,
+            'role' => $artisan->role,
+            'profile_image' => $artisan->profile_image
+                ? url('/' . $artisan->profile_image)
+                : null,
+            'followers_count' => $artisan->followers()->count(),
+            'following_count' => $artisan->following()->count(),
+            'created_at' => $artisan->created_at,
+            'updated_at' => $artisan->updated_at,
+        ];
+    });
+
+    return response()->json([
+        'data' => $artisans,
+        'message' => 'Artisans retrieved successfully',
+    ]);
+}
 }
