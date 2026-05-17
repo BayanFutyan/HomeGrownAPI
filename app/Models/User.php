@@ -89,4 +89,26 @@ class User extends Authenticatable
     {
         return $this->role === UserRoleEnum::USER;
     }
+
+    // ============================================================
+// دوال مساعدة
+// ============================================================
+
+// ... الدوال الموجودة (isAdmin, isArtisan, etc)
+
+/**
+ * Get followers count
+ */
+public function getFollowersCountAttribute(): int
+{
+    return $this->followers()->count();
+}
+
+/**
+ * Get following count
+ */
+public function getFollowingCountAttribute(): int
+{
+    return $this->following()->count();
+}
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Like;
 use App\Models\Comment;
+use App\Models\Activity;
 use App\Http\Resources\PostResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -19,17 +20,14 @@ class PostController extends Controller
     {
         $query = Post::with(['user', 'likes', 'comments']);
         
-        // ✅ 1. فلترة حسب المناسبة (occasion) - لـ ExploreFilterChips
         if ($request->has('occasion') && $request->occasion && $request->occasion !== 'all') {
             $query->where('occasion', $request->occasion);
         }
         
-        // ✅ 2. البحث في محتوى المنشور (Search) - لـ ExploreSearchBar
         if ($request->has('search') && $request->search) {
             $query->where('content', 'like', '%' . $request->search . '%');
         }
         
-        // ✅ 3. الترتيب (Sorting)
         $sort = $request->get('sort', 'latest');
         
         switch ($sort) {
@@ -62,7 +60,7 @@ class PostController extends Controller
     }
 
     /**
-     * إنشاء منشور جديد (للمستخدم العادي)
+     * إنشاء منشور جديد
      */
     public function store(Request $request)
     {
@@ -86,7 +84,7 @@ class PostController extends Controller
     }
 
     /**
-     * تحديث منشور (لصاحبه فقط)
+     * تحديث منشور
      */
     public function update(Request $request, $id)
     {
@@ -108,7 +106,7 @@ class PostController extends Controller
     }
 
     /**
-     * حذف منشور (لصاحبه فقط)
+     * حذف منشور
      */
     public function destroy(Request $request, $id)
     {
@@ -119,7 +117,7 @@ class PostController extends Controller
     }
 
     /**
-     * جلب منشورات مستخدم معين (للبروفايل)
+     * جلب منشورات مستخدم معين
      */
     public function getUserPosts($userId, Request $request)
     {
@@ -132,7 +130,7 @@ class PostController extends Controller
     }
 
     /**
-     * إعجاب بمنشور
+     * إعجاب بمنشور مع تسجيل النشاط
      */
     public function like(Request $request, $id)
     {
@@ -148,13 +146,25 @@ class PostController extends Controller
             return response()->json(['message' => 'Already liked'], 400);
         }
 
-        Like::create([
+        $like = Like::create([
             'user_id' => $userId,
             'likeable_type' => 'App\\Models\\Post',
             'likeable_id' => $id,
         ]);
 
         $post->increment('likes_count');
+
+        // ✅ تسجيل النشاط لصاحب المنشور (إذا كان غير صاحب اللايك)
+        if ($post->user_id != $userId) {
+            Activity::create([
+                'user_id' => $post->user_id,
+                'actor_id' => $userId,
+                'type' => 'like_post',
+                'target_type' => 'Post',
+                'target_id' => $post->id,
+                'target_title' => substr($post->content, 0, 100),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Post liked successfully',
@@ -163,7 +173,7 @@ class PostController extends Controller
     }
 
     /**
-     * إلغاء إعجاب بمنشور
+     * إلغاء إعجاب بمنشور وحذف النشاط
      */
     public function unlike(Request $request, $id)
     {
@@ -182,6 +192,13 @@ class PostController extends Controller
         $like->delete();
         $post->decrement('likes_count');
 
+        // ✅ حذف النشاط المرتبط
+        Activity::where('user_id', $post->user_id)
+            ->where('actor_id', $userId)
+            ->where('type', 'like_post')
+            ->where('target_id', $post->id)
+            ->delete();
+
         return response()->json([
             'message' => 'Post unliked successfully',
             'likes_count' => $post->fresh()->likes_count
@@ -189,42 +206,48 @@ class PostController extends Controller
     }
 
     /**
-     * إضافة تعليق على منشور
+     * إضافة تعليق على منشور مع تسجيل النشاط
      */
-public function addComment(Request $request, $id)
-{
-    $post = Post::findOrFail($id);
-    
-    $request->validate([
-        'comment' => 'required|string|min:2',
-        'parent_id' => 'nullable|exists:comments,id',
-    ]);
-    
-    $comment = Comment::create([
-        'commentable_type' => 'App\\Models\\Post',
-        'commentable_id' => $id,
-        'user_id' => $request->user()->id,
-        'comment' => $request->comment,
-        'parent_id' => $request->parent_id ?? null,
-        'likes_count' => 0,
-    ]);
-    
-    // ✅ هذا السطر يجب أن يكون موجوداً
-    $post->increment('comments_count');
-    
-    // ✅ تأكد من أن التحديث تم
-    Log::info('Post comments_count updated', [
-        'post_id' => $id,
-        'new_count' => $post->fresh()->comments_count
-    ]);
-    
-    $comment->load('user');
-    
-    return response()->json([
-        'message' => 'Comment added successfully',
-        'comment' => $comment
-    ], 201);
-}
+    public function addComment(Request $request, $id)
+    {
+        $post = Post::findOrFail($id);
+        $userId = $request->user()->id;
+        
+        $request->validate([
+            'comment' => 'required|string|min:2',
+            'parent_id' => 'nullable|exists:comments,id',
+        ]);
+        
+        $comment = Comment::create([
+            'commentable_type' => 'App\\Models\\Post',
+            'commentable_id' => $id,
+            'user_id' => $userId,
+            'comment' => $request->comment,
+            'parent_id' => $request->parent_id ?? null,
+            'likes_count' => 0,
+        ]);
+        
+        $post->increment('comments_count');
+        
+        // ✅ تسجيل النشاط لصاحب المنشور (إذا كان غير صاحب التعليق)
+        if ($post->user_id != $userId) {
+            Activity::create([
+                'user_id' => $post->user_id,
+                'actor_id' => $userId,
+                'type' => 'comment_post',
+                'target_type' => 'Post',
+                'target_id' => $post->id,
+                'target_title' => substr($post->content, 0, 100),
+            ]);
+        }
+        
+        $comment->load('user');
+        
+        return response()->json([
+            'message' => 'Comment added successfully',
+            'comment' => $comment
+        ], 201);
+    }
 
     /**
      * جلب تعليقات منشور
@@ -247,7 +270,7 @@ public function addComment(Request $request, $id)
     }
 
     /**
-     * حذف تعليق (لصاحب التعليق فقط)
+     * حذف تعليق وحذف النشاط المرتبط
      */
     public function deleteComment(Request $request, $commentId)
     {
@@ -261,6 +284,13 @@ public function addComment(Request $request, $id)
             $post = Post::find($comment->commentable_id);
             if ($post) {
                 $post->decrement('comments_count');
+                
+                // ✅ حذف النشاط المرتبط
+                Activity::where('user_id', $post->user_id)
+                    ->where('actor_id', $comment->user_id)
+                    ->where('type', 'comment_post')
+                    ->where('target_id', $post->id)
+                    ->delete();
             }
         }
         

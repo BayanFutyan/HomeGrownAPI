@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Enums\UserRoleEnum;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -82,7 +83,43 @@ class UserController extends Controller
     /**
      * Get authenticated user profile
      */
-public function profile(): JsonResponse
+    /**
+     * Get authenticated user profile
+     */
+    public function profile(): JsonResponse
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized. Please login.'], 401);
+        }
+
+        return response()->json([
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'address' => $user->address,
+                'bio' => $user->bio,
+                'profile_image' => $user->profile_image
+                    ? url('/' . $user->profile_image)
+                    : null,
+                'role' => $user->role,
+                'followers_count' => $user->followers()->count(),  // 🔥 جديدة
+                'following_count' => $user->following()->count(),  // 🔥 جديدة
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at,
+            ],
+            'message' => 'Profile retrieved successfully'
+        ]);
+    }
+
+    /**
+     * Update user profile
+     */
+   public function updateProfile(Request $request): JsonResponse
 {
     /** @var User|null $user */
     $user = Auth::user();
@@ -90,6 +127,86 @@ public function profile(): JsonResponse
     if (!$user) {
         return response()->json(['message' => 'Unauthorized. Please login.'], 401);
     }
+
+    $request->validate([
+        'name' => 'sometimes|string|max:255',
+        'phone' => 'sometimes|string|max:20',
+        'address' => 'sometimes|string|max:500',
+        'bio' => 'nullable|string|max:1000',
+        'profile_image' => 'nullable|string',
+    ]);
+
+    $updateData = [];
+
+    if ($request->has('name')) {
+        $updateData['name'] = $request->name;
+    }
+
+    if ($request->has('phone')) {
+        $updateData['phone'] = $request->phone;
+    }
+
+    if ($request->has('address')) {
+        $updateData['address'] = $request->address;
+    }
+
+    if ($request->has('bio')) {
+        $updateData['bio'] = $request->bio;
+    }
+
+    // ✅ معالجة الصورة (Base64)
+    if ($request->has('profile_image') && $request->profile_image) {
+        try {
+            $imageData = $request->profile_image;
+            
+            // استخراج نوع الصورة من Base64
+            if (preg_match('/^data:image\/(\w+);base64,/', $imageData, $type)) {
+                $imageData = substr($imageData, strpos($imageData, ',') + 1);
+                $type = strtolower($type[1]);
+                
+                // التحقق من نوع الصورة
+                if (!in_array($type, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                    return response()->json(['message' => 'Invalid image type'], 400);
+                }
+                
+                // فك تشفير Base64
+                $imageData = base64_decode($imageData);
+                
+                if ($imageData === false) {
+                    return response()->json(['message' => 'Invalid base64 data'], 400);
+                }
+                
+                // إنشاء اسم فريد
+                $imageName = 'avatars/' . time() . '_' . uniqid() . '.' . $type;
+                $fullPath = storage_path('app/public/' . $imageName);
+                
+                // إنشاء المجلد إذا لم يكن موجود
+                $directory = dirname($fullPath);
+                if (!file_exists($directory)) {
+                    mkdir($directory, 0755, true);
+                }
+                
+                // حفظ الصورة
+                file_put_contents($fullPath, $imageData);
+                
+                // حفظ المسار (بدون /storage/ لأننا بنستخدم asset)
+                $updateData['profile_image'] = 'storage/' . $imageName;
+                
+                // حذف الصورة القديمة إذا وجدت
+                if ($user->profile_image && file_exists(public_path($user->profile_image))) {
+                    @unlink(public_path($user->profile_image));
+                }
+            } else {
+                return response()->json(['message' => 'Invalid image format'], 400);
+            }
+        } catch (\Exception $e) {
+            Log::error('Image upload error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to upload image: ' . $e->getMessage()], 500);
+        }
+    }
+
+    $user->update($updateData);
+    $user->refresh();
 
     return response()->json([
         'data' => [
@@ -99,77 +216,14 @@ public function profile(): JsonResponse
             'phone' => $user->phone,
             'address' => $user->address,
             'bio' => $user->bio,
-            // ✅ أصلح مسار الصورة - أزل /storage/
-            'profile_image' => $user->profile_image 
-                ? url('/' . $user->profile_image)  // ✅ بدون /storage/
-                : null,
+            'profile_image' => $user->profile_image ? url($user->profile_image) : null,
             'role' => $user->role,
-            'created_at' => $user->created_at,
-            'updated_at' => $user->updated_at,
+            'followers_count' => $user->followers()->count(),
+            'following_count' => $user->following()->count(),
         ],
-        'message' => 'Profile retrieved successfully'
+        'message' => 'Profile updated successfully'
     ]);
 }
-
-    /**
-     * Update user profile
-     */
-    public function updateProfile(Request $request): JsonResponse
-    {
-        /** @var User|null $user */
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized. Please login.'], 401);
-        }
-
-        $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20',
-            'address' => 'sometimes|string|max:500',
-            'bio' => 'nullable|string|max:1000',           // ✅ أضف هذا
-            'profile_image' => 'nullable|string',
-        ]);
-
-        $updateData = [];
-
-        if ($request->has('name')) {
-            $updateData['name'] = $request->name;
-        }
-
-        if ($request->has('phone')) {
-            $updateData['phone'] = $request->phone;
-        }
-
-        if ($request->has('address')) {
-            $updateData['address'] = $request->address;
-        }
-
-        if ($request->has('bio')) {                        // ✅ أضف هذا
-            $updateData['bio'] = $request->bio;
-        }
-
-        if ($request->has('profile_image')) {
-            $updateData['profile_image'] = $request->profile_image;
-        }
-
-        $user->update($updateData);
-        $user->refresh();
-
-        return response()->json([
-            'data' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'address' => $user->address,
-                'bio' => $user->bio,                       // ✅ أضف هذا
-'profile_image' => $user->profile_image ? url('/' . $user->profile_image) : null,                'role' => $user->role,
-            ],
-            'message' => 'Profile updated successfully'
-        ]);
-    }
-
     /**
      * Get user's followers
      */
@@ -211,41 +265,41 @@ public function profile(): JsonResponse
     }
 
     public function searchArtisans(Request $request): JsonResponse
-{
-    $search = $request->query('search');
+    {
+        $search = $request->query('search');
 
-    $query = User::where('role', UserRoleEnum::ARTISAN);
+        $query = User::where('role', UserRoleEnum::ARTISAN);
 
-    if ($search) {
-        $query->where(function ($q) use ($search) {
-            $q->where('name', 'like', '%' . $search . '%')
-              ->orWhere('bio', 'like', '%' . $search . '%')
-              ->orWhere('address', 'like', '%' . $search . '%');
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('bio', 'like', '%' . $search . '%')
+                    ->orWhere('address', 'like', '%' . $search . '%');
+            });
+        }
+
+        $artisans = $query->limit(10)->get()->map(function ($artisan) {
+            return [
+                'id' => $artisan->id,
+                'name' => $artisan->name,
+                'email' => $artisan->email,
+                'phone' => $artisan->phone,
+                'address' => $artisan->address,
+                'bio' => $artisan->bio,
+                'role' => $artisan->role,
+                'profile_image' => $artisan->profile_image
+                    ? url('/' . $artisan->profile_image)
+                    : null,
+                'followers_count' => $artisan->followers()->count(),
+                'following_count' => $artisan->following()->count(),
+                'created_at' => $artisan->created_at,
+                'updated_at' => $artisan->updated_at,
+            ];
         });
+
+        return response()->json([
+            'data' => $artisans,
+            'message' => 'Artisans retrieved successfully',
+        ]);
     }
-
-    $artisans = $query->limit(10)->get()->map(function ($artisan) {
-        return [
-            'id' => $artisan->id,
-            'name' => $artisan->name,
-            'email' => $artisan->email,
-            'phone' => $artisan->phone,
-            'address' => $artisan->address,
-            'bio' => $artisan->bio,
-            'role' => $artisan->role,
-            'profile_image' => $artisan->profile_image
-                ? url('/' . $artisan->profile_image)
-                : null,
-            'followers_count' => $artisan->followers()->count(),
-            'following_count' => $artisan->following()->count(),
-            'created_at' => $artisan->created_at,
-            'updated_at' => $artisan->updated_at,
-        ];
-    });
-
-    return response()->json([
-        'data' => $artisans,
-        'message' => 'Artisans retrieved successfully',
-    ]);
-}
 }
