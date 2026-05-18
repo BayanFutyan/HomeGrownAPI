@@ -111,4 +111,14 @@ public function getFollowingCountAttribute(): int
 {
     return $this->following()->count();
 }
+
+public function ratingsGiven()
+{
+    return $this->hasMany(Rating::class, 'user_id');
+}
+
+public function ratingsReceived()
+{
+    return $this->hasMany(Rating::class, 'artisan_id');
+}
 }

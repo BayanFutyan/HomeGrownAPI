@@ -134,6 +134,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/artisans/search', [UserController::class, 'searchArtisans']);
 
+    // Artisan Profile
+    Route::get('/artisans/{id}', [UserController::class, 'getArtisanProfile']);
+    Route::get('/artisans/{id}/products', [UserController::class, 'getArtisanProducts']);
+    Route::get('/artisans/{id}/posts', [UserController::class, 'getArtisanPosts']);
+
+    // Follow
+    Route::post('/artisans/{id}/follow', [UserController::class, 'followArtisan']);
+    Route::delete('/artisans/{id}/follow', [UserController::class, 'unfollowArtisan']);
+    Route::get('/artisans/{id}/check-follow', [UserController::class, 'checkFollowArtisan']);
+
+    // Rating
+    Route::post('/artisans/{id}/rate', [UserController::class, 'rateArtisan']);
+    Route::get('/artisans/{id}/my-rating', [UserController::class, 'getMyRatingForArtisan']);
         /*
         |--------------------------------------------------------------------------
         | Products

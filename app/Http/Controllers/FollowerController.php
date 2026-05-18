@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Helpers\ActivityHelper;  // ✅ أضف هذا
+use App\Helpers\ActivityHelper;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -55,9 +55,8 @@ class FollowerController extends Controller
             return response()->json(['message' => 'Already following this user'], 400);
         }
 
-        $user->following()->attach($followingId, [
-            'rating' => $request->rating ?? null,
-        ]);
+        // ✅ حذف 'rating' لأنه موجود الآن في جدول منفصل
+        $user->following()->attach($followingId);
 
         // ✅ تسجيل نشاط المتابعة
         $followedUser = User::find($followingId);
@@ -95,8 +94,6 @@ class FollowerController extends Controller
         }
 
         $user->following()->detach($id);
-
-        // ملاحظة: لا نقوم بحذف نشاط المتابعة السابق، يبقى في السجل
 
         return response()->json([
             'message' => 'User unfollowed successfully'
