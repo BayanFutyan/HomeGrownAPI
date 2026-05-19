@@ -243,7 +243,11 @@ Route::middleware('auth:sanctum')->group(function () {
     */
 
     Route::apiResource('exhibitions', ExhibitionController::class);
-
+    Route::get('/my-exhibitions', [ExhibitionController::class, 'myExhibitions']);
+    // في api.php
+    // Route::post('/exhibitions/{id}/update-with-image', [ExhibitionController::class, 'updateWithImage']);
+// في api.php
+Route::post('/exhibitions/{id}/upload-image', [ExhibitionController::class, 'uploadImage']);
     Route::get(
         '/exhibitions/owner/{ownerId}',
         [ExhibitionController::class, 'getByOwner']
@@ -259,15 +263,20 @@ Route::middleware('auth:sanctum')->group(function () {
         [ExhibitionRegistrationController::class, 'getExhibitionRegistrations']
     );
 
+    
+
     Route::put(
         '/exhibition-registrations/{registrationId}/status',
         [ExhibitionRegistrationController::class, 'updateStatus']
     );
 
-    Route::get(
-        '/owners/{ownerId}/registrations',
-        [ExhibitionRegistrationController::class, 'getOwnerRegistrations']
-    );
+    // Route::get(
+    //     '/owners/{ownerId}/registrations',
+    //     [ExhibitionRegistrationController::class, 'getOwnerRegistrations']
+    // );
+
+    Route::get('/my-registrations', 
+    [ExhibitionRegistrationController::class, 'getOwnerRegistrations']);
 });
 
 /*

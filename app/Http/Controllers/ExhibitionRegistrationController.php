@@ -7,6 +7,8 @@ use App\Models\ExhibitionRegistration;
 use App\Models\User;
 use App\Enums\UserRoleEnum;
 use Illuminate\Http\Request;
+use App\Models\Follower; // ✅ أضيفي هذا في الأعلى
+
 
 class ExhibitionRegistrationController extends Controller
 {
@@ -139,41 +141,49 @@ class ExhibitionRegistrationController extends Controller
         ]);
     }
 
-    public function getOwnerRegistrations($ownerId)
-    {
-        $owner = User::find($ownerId);
+public function getOwnerRegistrations()
+{
+    $ownerId = auth()->id();
+    
+    $registrations = ExhibitionRegistration::with([
+        'seller:id,name,role,profile_image',
+        'exhibition'
+    ])->whereHas('exhibition', function ($query) use ($ownerId) {
+        $query->where('owner_id', $ownerId);
+    })->latest()->get();
 
-        if (!$owner) {
-            return response()->json([
-                'message' => 'Owner not found'
-            ], 404);
-        }
-
-        $ownerRole = $owner->role instanceof UserRoleEnum
-            ? $owner->role->value
-            : $owner->role;
-
-        if ($ownerRole !== UserRoleEnum::EXHIBITION_OWNER->value) {
-            return response()->json([
-                'message' => 'This user is not an exhibition owner.'
-            ], 403);
-        }
-
-        $registrations = ExhibitionRegistration::with([
-                'seller',
-                'exhibition'
-            ])
-            ->whereHas('exhibition', function ($query) use ($ownerId) {
-                $query->where('owner_id', $ownerId);
-            })
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'data' => $registrations
-        ]);
+    $result = [];
+    foreach ($registrations as $reg) {
+        $seller = $reg->seller;
+        $sellerId = $seller->id;
+        
+        // ✅ استعلام بسيط
+        $followersCount = Follower::where('following_id', $sellerId)->count();
+        
+        // ✅ طباعة للتأكد
+        \Log::info("Seller ID: $sellerId, Followers Count: $followersCount");
+        
+        $result[] = [
+            'id' => $reg->id,
+            'exhibition_id' => $reg->exhibition_id,
+            'seller_id' => $reg->seller_id,
+            'type' => $reg->type,
+            'status' => $reg->status,
+            'created_at' => $reg->created_at,
+            'updated_at' => $reg->updated_at,
+            'seller' => [
+                'id' => $seller->id,
+                'name' => $seller->name,
+                'role' => $seller->role,
+                'profile_image' => $seller->profile_image,
+                'followers_count' => $followersCount,
+            ],
+            'exhibition' => $reg->exhibition,
+        ];
     }
 
+    return response()->json(['data' => $result]);
+}
     /**
      * Display a listing of the resource.
      */
@@ -229,4 +239,6 @@ class ExhibitionRegistrationController extends Controller
     {
         //
     }
+
+    
 }
