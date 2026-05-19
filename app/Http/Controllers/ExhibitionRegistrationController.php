@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Enums\UserRoleEnum;
 use Illuminate\Http\Request;
 use App\Models\Follower; // ✅ أضيفي هذا في الأعلى
+use App\Models\Rating;      // ✅ أضيفي هذا
+use App\Models\Product;     // ✅ أضيفي هذا
 
 
 class ExhibitionRegistrationController extends Controller
@@ -62,25 +64,59 @@ class ExhibitionRegistrationController extends Controller
         ], 201);
     }
 
-    public function getExhibitionRegistrations($exhibitionId)
-    {
-        $exhibition = Exhibition::find($exhibitionId);
+public function getExhibitionRegistrations($exhibitionId)
+{
+    $exhibition = Exhibition::find($exhibitionId);
 
-        if (!$exhibition) {
-            return response()->json([
-                'message' => 'Exhibition not found'
-            ], 404);
-        }
-
-        $registrations = ExhibitionRegistration::with('seller')
-            ->where('exhibition_id', $exhibitionId)
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'data' => $registrations
-        ]);
+    if (!$exhibition) {
+        return response()->json(['message' => 'Exhibition not found'], 404);
     }
+
+    $registrations = ExhibitionRegistration::with('seller')
+        ->where('exhibition_id', $exhibitionId)
+        ->latest()
+        ->get();
+
+    $result = [];
+    foreach ($registrations as $reg) {
+        $seller = $reg->seller;
+        $sellerId = $seller->id;
+        
+        // حساب البيانات
+        $followersCount = Follower::where('following_id', $sellerId)->count();
+        $averageRating = Rating::where('artisan_id', $sellerId)->avg('rating');
+        $productsCount = Product::where('seller_id', $sellerId)->count();  // ✅ استخدمي seller_id
+        
+        $result[] = [
+            'id' => $reg->id,
+            'exhibition_id' => $reg->exhibition_id,
+            'seller_id' => $reg->seller_id,
+            'type' => $reg->type,
+            'status' => $reg->status,
+            'created_at' => $reg->created_at,
+            'updated_at' => $reg->updated_at,
+            'seller' => [
+                'id' => $seller->id,
+                'name' => $seller->name,
+                'role' => $seller->role,
+                'profile_image' => $seller->profile_image,
+                'bio' => $seller->bio,
+                'followers_count' => $followersCount,
+                'average_rating' => $averageRating ? (float) number_format($averageRating, 1) : null,
+                'products_count' => $productsCount,
+            ],
+            'exhibition' => [
+                'id' => $reg->exhibition->id,
+                'title' => $reg->exhibition->title,
+                'location' => $reg->exhibition->location,
+                'date' => $reg->exhibition->date,
+                'image' => $reg->exhibition->image,
+            ],
+        ];
+    }
+
+    return response()->json(['data' => $result]);
+}
 
     public function updateStatus($registrationId, Request $request)
     {
