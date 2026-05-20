@@ -135,19 +135,23 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthorized. Please login.'], 401);
         }
 
-        $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20',
-            'address' => 'sometimes|string|max:500',
-            'bio' => 'nullable|string|max:1000',
-            'profile_image' => 'nullable|string',
-        ]);
+     $request->validate([
+    'name' => 'sometimes|string|max:255',
+    'email' => 'sometimes|email|max:255|unique:users,email,' . $user->id,
+    'phone' => 'nullable|string|max:20',
+    'address' => 'nullable|string|max:500',
+    'bio' => 'nullable|string|max:1000',
+    'profile_image' => 'nullable|string',
+]);
 
         $updateData = [];
 
         if ($request->has('name')) {
             $updateData['name'] = $request->name;
         }
+        if ($request->has('email')) {
+    $updateData['email'] = $request->email;
+}
 
         if ($request->has('phone')) {
             $updateData['phone'] = $request->phone;
@@ -162,55 +166,59 @@ class UserController extends Controller
         }
 
         // ✅ معالجة الصورة (Base64)
-        if ($request->has('profile_image') && $request->profile_image) {
-            try {
-                $imageData = $request->profile_image;
+// ✅ معالجة الصورة (Base64)
+if ($request->has('profile_image') && $request->profile_image) {
+    try {
+        $imageData = $request->profile_image;
 
-                // استخراج نوع الصورة من Base64
-                if (preg_match('/^data:image\/(\w+);base64,/', $imageData, $type)) {
-                    $imageData = substr($imageData, strpos($imageData, ',') + 1);
-                    $type = strtolower($type[1]);
+        // استخراج نوع الصورة من Base64
+        if (preg_match('/^data:image\/(\w+);base64,/', $imageData, $type)) {
+            $imageData = substr($imageData, strpos($imageData, ',') + 1);
+            $type = strtolower($type[1]);
 
-                    // التحقق من نوع الصورة
-                    if (!in_array($type, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-                        return response()->json(['message' => 'Invalid image type'], 400);
-                    }
-
-                    // فك تشفير Base64
-                    $imageData = base64_decode($imageData);
-
-                    if ($imageData === false) {
-                        return response()->json(['message' => 'Invalid base64 data'], 400);
-                    }
-
-                    // إنشاء اسم فريد
-                    $imageName = 'avatars/' . time() . '_' . uniqid() . '.' . $type;
-                    $fullPath = storage_path('app/public/' . $imageName);
-
-                    // إنشاء المجلد إذا لم يكن موجود
-                    $directory = dirname($fullPath);
-                    if (!file_exists($directory)) {
-                        mkdir($directory, 0755, true);
-                    }
-
-                    // حفظ الصورة
-                    file_put_contents($fullPath, $imageData);
-
-                    // حفظ المسار (بدون /storage/ لأننا بنستخدم asset)
-                    $updateData['profile_image'] = 'storage/' . $imageName;
-
-                    // حذف الصورة القديمة إذا وجدت
-                    if ($user->profile_image && file_exists(public_path($user->profile_image))) {
-                        @unlink(public_path($user->profile_image));
-                    }
-                } else {
-                    return response()->json(['message' => 'Invalid image format'], 400);
-                }
-            } catch (\Exception $e) {
-                Log::error('Image upload error: ' . $e->getMessage());
-                return response()->json(['message' => 'Failed to upload image: ' . $e->getMessage()], 500);
+            // التحقق من نوع الصورة
+            if (!in_array($type, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                return response()->json(['message' => 'Invalid image type'], 400);
             }
+
+            // فك تشفير Base64
+            $imageData = base64_decode($imageData);
+
+            if ($imageData === false) {
+                return response()->json(['message' => 'Invalid base64 data'], 400);
+            }
+
+            // إنشاء اسم فريد داخل public/images/avatars
+            $imageName = 'avatars/' . time() . '_' . uniqid() . '.' . $type;
+
+            $fullPath = public_path('images/' . $imageName);
+
+            // إنشاء المجلد إذا لم يكن موجود
+            $directory = dirname($fullPath);
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            // حفظ الصورة
+            file_put_contents($fullPath, $imageData);
+
+            // حفظ المسار في الداتابيس
+            $updateData['profile_image'] = 'images/' . $imageName;
+
+            // حذف الصورة القديمة إذا وجدت
+            if ($user->profile_image && file_exists(public_path($user->profile_image))) {
+                @unlink(public_path($user->profile_image));
+            }
+
+        } else {
+            return response()->json(['message' => 'Invalid image format'], 400);
         }
+
+    } catch (\Exception $e) {
+        Log::error('Image upload error: ' . $e->getMessage());
+        return response()->json(['message' => 'Failed to upload image: ' . $e->getMessage()], 500);
+    }
+}
 
         $user->update($updateData);
         $user->refresh();

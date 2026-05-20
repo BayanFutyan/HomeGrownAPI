@@ -10,34 +10,62 @@ use App\Models\User;
 class ExhibitionController extends Controller
 {
     
-    public function getByOwner($ownerId)
-    {
-        $owner = User::find($ownerId);
+public function getByOwner($ownerId, Request $request)
+{
+    $owner = User::find($ownerId);
 
-        if (!$owner) {
-            return response()->json([
-                'message' => 'Owner not found'
-            ], 404);
-        }
-
-        $ownerRole = $owner->role instanceof UserRoleEnum
-            ? $owner->role->value
-            : $owner->role;
-
-        if ($ownerRole !== UserRoleEnum::EXHIBITION_OWNER->value) {
-            return response()->json([
-                'message' => 'This user is not an exhibition owner.'
-            ], 403);
-        }
-
-        $exhibitions = Exhibition::where('owner_id', $ownerId)
-            ->latest()
-            ->get();
-
+    if (!$owner) {
         return response()->json([
-            'data' => $exhibitions
-        ]);
+            'message' => 'Owner not found'
+        ], 404);
     }
+
+    $ownerRole = $owner->role instanceof UserRoleEnum
+        ? $owner->role->value
+        : $owner->role;
+
+    if ($ownerRole !== UserRoleEnum::EXHIBITION_OWNER->value) {
+        return response()->json([
+            'message' => 'This user is not an exhibition owner.'
+        ], 403);
+    }
+
+    $authUser = $request->user();
+
+    $isOwner = $authUser && $authUser->id == $ownerId;
+
+    $query = Exhibition::where('owner_id', $ownerId);
+
+    if (!$isOwner) {
+        $query->where('type', 'public');
+    }
+
+    $exhibitions = $query
+        ->latest()
+        ->get();
+
+    return response()->json([
+        'owner' => [
+            'id' => $owner->id,
+            'name' => $owner->name,
+            'email' => $owner->email,
+            'phone' => (string) ($owner->phone ?? ''),
+            'address' => (string) ($owner->address ?? ''),
+            'bio' => $owner->bio,
+            'profile_image' => $owner->profile_image
+                ? url('/' . $owner->profile_image)
+                : null,
+            'followers_count' => $owner->followers()->count(),
+            'following_count' => $owner->following()->count(),
+        ],
+
+        'stats' => [
+            'exhibitions_count' => $exhibitions->count(),
+        ],
+
+        'data' => $exhibitions,
+    ]);
+}
     /**
      * Display a listing of the resource.
      */

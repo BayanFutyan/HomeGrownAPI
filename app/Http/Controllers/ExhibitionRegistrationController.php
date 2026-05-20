@@ -10,6 +10,9 @@ use Illuminate\Http\Request;
 use App\Models\Follower; // ✅ أضيفي هذا في الأعلى
 use App\Models\Rating;      // ✅ أضيفي هذا
 use App\Models\Product;     // ✅ أضيفي هذا
+use Illuminate\Support\Facades\Log;
+
+
 
 
 class ExhibitionRegistrationController extends Controller
@@ -197,7 +200,7 @@ public function getOwnerRegistrations()
         $followersCount = Follower::where('following_id', $sellerId)->count();
         
         // ✅ طباعة للتأكد
-        \Log::info("Seller ID: $sellerId, Followers Count: $followersCount");
+        Log::info("Seller ID: $sellerId, Followers Count: $followersCount");
         
         $result[] = [
             'id' => $reg->id,
