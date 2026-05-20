@@ -85,82 +85,90 @@ class ProductController extends Controller
     /**
      * Display a listing of the products
      */
-    public function index(Request $request)
-    {
-        $user = $this->getCurrentUser();
-        
-        if (!$user) {
-            $products = Product::with(['offer' => function($q) {
-                $q->where('end_date', '>=', now());
-            }])->paginate(4);
-            return response()->json([
-                'data' => $products,
-                'message' => 'Products retrieved successfully'
-            ]);
-        }
-        
-        if ($user->role?->value !== 'artisan') {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-        
-        $query = Product::where('seller_id', $user->id);
-        
-        $query->with(['offer' => function($q) {
+/**
+ * Display a listing of the products
+ */
+public function index(Request $request)
+{
+    $user = $this->getCurrentUser();
+    
+    if (!$user) {
+        $products = Product::with(['offer' => function($q) {
             $q->where('end_date', '>=', now());
-        }]);
-        
-        // فلترة البحث
-        if ($request->has('search') && $request->search) {
-            $query->where('name', 'like', '%' . $request->search . '%');
-        }
-        
-        // فلترة الحالة
-        if ($request->has('status') && $request->status != 'All Status') {
-            switch ($request->status) {
-                case 'On Sale':
-                    $query->where('is_sale', true);
-                    break;
-                case 'In Stock':
-                    $query->where('stock', '>', 0);
-                    break;
-                case 'Out of Stock':
-                    $query->where('stock', 0);
-                    break;
-                case 'No Comments':
-                    $query->whereDoesntHave('comments');
-                    break;
-            }
-        }
-        
-        // ترتيب المنتجات
-        if ($request->has('sort') && $request->sort != 'Newest') {
-            switch ($request->sort) {
-                case 'Top Selling':
-                    $query->orderBy('sales_count', 'desc');
-                    break;
-                case 'Highest Price':
-                    $query->orderBy('price', 'desc');
-                    break;
-                case 'Lowest Price':
-                    $query->orderBy('price', 'asc');
-                    break;
-                case 'Top Liked':
-                    $query->orderBy('likes_count', 'desc');
-                    break;
-                default:
-                    $query->orderBy('created_at', 'desc');
-            }
-        } else {
-            $query->orderBy('created_at', 'desc');
-        }
-        
-        $products = $query->paginate(4);
-        
+        }])->paginate(4);
         return response()->json([
             'data' => $products,
             'message' => 'Products retrieved successfully'
         ]);
     }
+    
+    if ($user->role?->value !== 'artisan') {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+    
+    $query = Product::where('seller_id', $user->id);
+    
+    $query->with(['offer' => function($q) {
+        $q->where('end_date', '>=', now());
+    }]);
+    
+    // فلترة البحث
+    if ($request->has('search') && $request->search) {
+        $query->where('name', 'like', '%' . $request->search . '%');
+    }
+    
+    // فلترة الحالة
+    if ($request->has('status') && $request->status != 'All Status') {
+        switch ($request->status) {
+            case 'On Sale':
+                $query->where('is_sale', true);
+                break;
+            case 'In Stock':
+                $query->where('stock', '>', 0);
+                break;
+            case 'Out of Stock':
+                $query->where('stock', 0);
+                break;
+            case 'No Comments':
+                $query->whereDoesntHave('comments');
+                break;
+        }
+    }
+    
+    // ✅ فلترة الكاتيجوري (جديد)
+    if ($request->has('category') && $request->category && $request->category != 'All Categories') {
+        $query->where('category', $request->category);
+    }
+    
+    // ترتيب المنتجات
+    if ($request->has('sort') && $request->sort != 'Newest') {
+        switch ($request->sort) {
+            case 'Top Selling':
+                $query->orderBy('sales_count', 'desc');
+                break;
+            case 'Highest Price':
+                $query->orderBy('price', 'desc');
+                break;
+            case 'Lowest Price':
+                $query->orderBy('price', 'asc');
+                break;
+            case 'Top Liked':
+                $query->orderBy('likes_count', 'desc');
+                break;
+            default:
+                $query->orderBy('created_at', 'desc');
+        }
+    } else {
+        $query->orderBy('created_at', 'desc');
+    }
+    
+    $products = $query->paginate(4);
+    
+    return response()->json([
+        'data' => $products,
+        'message' => 'Products retrieved successfully'
+    ]);
+}
     
     /**
      * Store a newly created product
@@ -545,4 +553,86 @@ class ProductController extends Controller
             'message' => 'Comments retrieved successfully'
         ]);
     }
+
+    /**
+ * Get unique categories for the authenticated artisan's products
+ */
+public function getSellerCategories()
+{
+    $user = $this->getCurrentUser();
+    
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized. Please login.'], 401);
+    }
+    
+    if ($user->role?->value !== 'artisan') {
+        return response()->json(['message' => 'Unauthorized. Only artisans can access this resource.'], 403);
+    }
+    
+    $categories = Product::where('seller_id', $user->id)
+        ->whereNull('deleted_at')
+        ->distinct()
+        ->pluck('category');
+    
+    // فلترة القيم الفارغة إن وجدت
+    $categories = $categories->filter(function($category) {
+        return !empty($category) && $category !== null;
+    })->values();
+    
+    return response()->json([
+        'success' => true,
+        'data' => $categories,
+        'message' => 'Categories retrieved successfully'
+    ]);
+}
+
+public function bulkAddOffer(Request $request)
+{
+    $user = $this->getCurrentUser();
+
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized. Please login.'], 401);
+    }
+
+    $request->validate([
+        'product_ids' => 'required|array|min:1',
+        'product_ids.*' => 'required|integer|exists:products,id',
+        'discount_percentage' => 'required|numeric|min:0|max:100',
+        'start_date' => 'required|date',
+        'end_date' => 'required|date|after:start_date',
+    ]);
+
+    $products = Product::whereIn('id', $request->product_ids)
+        ->where('seller_id', $user->id)
+        ->get();
+
+    if ($products->count() !== count($request->product_ids)) {
+        return response()->json([
+            'message' => 'Some products are not found or not yours'
+        ], 403);
+    }
+
+    foreach ($products as $product) {
+        $discountedPrice = $product->price - (
+            $product->price * $request->discount_percentage / 100
+        );
+
+        Offer::updateOrCreate(
+            ['product_id' => $product->id],
+            [
+                'discount_value' => $request->discount_percentage,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
+                'discounted_price' => $discountedPrice,
+            ]
+        );
+
+        $product->update(['is_sale' => true]);
+    }
+
+    return response()->json([
+        'message' => 'Bulk offers applied successfully',
+        'count' => $products->count(),
+    ]);
+}
 }

@@ -324,6 +324,7 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
     Route::post('/products/{id}/offer', [ProductController::class, 'addOffer']);
 
     Route::delete('/products/{id}/offer', [ProductController::class, 'removeOffer']);
+    Route::post('/products/bulk-offer', [ProductController::class, 'bulkAddOffer']);
 
     /*
     |--------------------------------------------------------------------------
@@ -338,6 +339,14 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
     Route::get('/orders/seller/list', [OrderController::class, 'sellerOrders']);
 
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Categories
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/categories', [ProductController::class, 'getSellerCategories']);
 });
 
 /*
