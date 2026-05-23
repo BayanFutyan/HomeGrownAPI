@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+
 class Product extends Model
 {
     use HasFactory, SoftDeletes;
@@ -151,13 +152,46 @@ class Product extends Model
     /**
      * Boot the model
      */
-    protected static function boot()
-    {
-        parent::boot();
+protected static function boot()
+{
+    parent::boot();
 
-        // عند إضافة Like جديد
-        static::created(function ($product) {
-            // لا نحتاج لهذا
-        });
-    }
+    static::created(function ($product) {
+        $seller = $product->seller;
+        $followers = $seller->followers()
+                            ->where('role', \App\Enums\UserRoleEnum::USER) // only normal users
+                            ->get();
+
+        $firebaseService = new \App\Services\FirebaseNotificationService();
+
+        foreach ($followers as $follower) {
+            \App\Models\Notification::create([
+                'user_id' => $follower->id,
+                'title' => 'New Product Added',
+                'body' => $seller->name . ' has added a new product: ' . $product->name,
+                'type' => 'new_product',
+                'data' => [
+                    'product_id' => $product->id,
+                    'seller_id' => $seller->id,
+                    'type' => 'new_product'
+                ],
+                'is_read' => false
+            ]);
+
+            $tokens = $follower->fcmTokens()->pluck('token')->toArray();
+            if (!empty($tokens)) {
+                $firebaseService->send(
+                    $tokens,
+                    'New Product Added',
+                    $seller->name . ' has added a new product: ' . $product->name,
+                    [
+                        'product_id' => $product->id,
+                        'seller_id' => $seller->id,
+                        'type' => 'new_product'
+                    ]
+                );
+            }
+        }
+    });
+}
 }

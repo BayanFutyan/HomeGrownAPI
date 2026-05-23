@@ -10,6 +10,8 @@ use App\Helpers\ActivityHelper;  // ✅ أضف هذا
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Notification;
+use App\Services\FirebaseNotificationService;
 
 class CommentController extends Controller
 {
@@ -60,6 +62,46 @@ class CommentController extends Controller
             'likes_count' => 0,
         ]);
 
+
+        if ($request->parent_id) {
+    $parentComment = Comment::with('user')->find($request->parent_id);
+
+    if ($parentComment && $parentComment->user_id != $user->id) {
+        $product = null;
+
+        if ($commentableType === 'App\\Models\\Product') {
+            $product = Product::find($commentableId);
+        }
+
+        $title = '';
+        $body = $user->name . ' replied to your comment on ' . ($product?->name ?? 'a product');
+
+        $data = [
+            'type' => 'product_comment_reply',
+            'comment_id' => $comment->id,
+            'parent_id' => $parentComment->id,
+            'product_id' => $product?->id,
+            'seller_id' => $user->id,
+            'click_action' => 'product_page',
+        ];
+
+        Notification::create([
+            'user_id' => $parentComment->user_id,
+            'title' => $title,
+            'body' => $body,
+            'type' => 'product_comment_reply',
+            'data' => $data,
+            'is_read' => false,
+        ]);
+
+        $tokens = $parentComment->user?->fcmTokens()->pluck('token')->toArray() ?? [];
+
+        if (!empty($tokens)) {
+            $firebaseService = new FirebaseNotificationService();
+            $firebaseService->send($tokens, $title, $body, $data);
+        }
+    }
+}
         // ✅ تسجيل نشاط التعليق
         $targetUserId = null;
         $activityType = null;

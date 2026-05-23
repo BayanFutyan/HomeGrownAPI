@@ -10,6 +10,9 @@ use App\Models\Activity;
 use App\Http\Resources\PostResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Models\Notification;
+use App\Services\FirebaseNotificationService;
+use App\Enums\UserRoleEnum;
 
 class PostController extends Controller
 {
@@ -129,6 +132,36 @@ class PostController extends Controller
         return PostResource::collection($posts);
     }
 
+    private function sendUserNotification($receiver, $actor, string $body, string $type, array $data)
+{
+    if (
+        !$receiver ||
+        !$actor ||
+        $receiver->id == $actor->id ||
+        $receiver->role?->value !== 'user' ||
+        $actor->role?->value !== 'user'
+    ) {
+        return;
+    }
+
+    $title = '';
+
+    Notification::create([
+        'user_id' => $receiver->id,
+        'title' => $title,
+        'body' => $body,
+        'type' => $type,
+        'data' => $data,
+        'is_read' => false,
+    ]);
+
+    $tokens = $receiver->fcmTokens()->pluck('token')->toArray();
+
+    if (!empty($tokens)) {
+        $firebaseService = new FirebaseNotificationService();
+        $firebaseService->send($tokens, $title, $body, $data);
+    }
+}
     /**
      * إعجاب بمنشور مع تسجيل النشاط
      */
@@ -153,6 +186,22 @@ class PostController extends Controller
         ]);
 
         $post->increment('likes_count');
+
+        $post->load('user');
+$actor = $request->user();
+
+$this->sendUserNotification(
+    $post->user,
+    $actor,
+    $actor->name . ' liked your post',
+    'post_like',
+    [
+        'type' => 'post_like',
+        'post_id' => $post->id,
+        'actor_id' => $actor->id,
+        'click_action' => 'post_page',
+    ]
+);
 
         // ✅ تسجيل النشاط لصاحب المنشور (إذا كان غير صاحب اللايك)
         if ($post->user_id != $userId) {
@@ -228,6 +277,44 @@ class PostController extends Controller
         ]);
         
         $post->increment('comments_count');
+
+        $post->load('user');
+$actor = $request->user();
+
+if ($request->parent_id) {
+    $parentComment = Comment::with('user')->find($request->parent_id);
+
+    if ($parentComment) {
+        $this->sendUserNotification(
+            $parentComment->user,
+            $actor,
+            $actor->name . ' replied to your comment',
+            'post_comment_reply',
+            [
+                'type' => 'post_comment_reply',
+                'post_id' => $post->id,
+                'comment_id' => $comment->id,
+                'parent_id' => $parentComment->id,
+                'actor_id' => $actor->id,
+                'click_action' => 'post_page',
+            ]
+        );
+    }
+} else {
+    $this->sendUserNotification(
+        $post->user,
+        $actor,
+        $actor->name . ' commented on your post',
+        'post_comment',
+        [
+            'type' => 'post_comment',
+            'post_id' => $post->id,
+            'comment_id' => $comment->id,
+            'actor_id' => $actor->id,
+            'click_action' => 'post_page',
+        ]
+    );
+}
         
         // ✅ تسجيل النشاط لصاحب المنشور (إذا كان غير صاحب التعليق)
         if ($post->user_id != $userId) {

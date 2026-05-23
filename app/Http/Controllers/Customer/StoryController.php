@@ -7,6 +7,9 @@ use App\Models\Story;
 use App\Models\StoryView;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Notification;
+use App\Services\FirebaseNotificationService;
+use App\Enums\UserRoleEnum;
 
 class StoryController extends Controller
 {
@@ -112,33 +115,65 @@ class StoryController extends Controller
         'message' => 'Story created successfully'
     ], 201);
 }
+public function view(Request $request, $id)
+{
+    $story = Story::with('user')->findOrFail($id);
+    $viewer = $request->user();
+    $userId = $viewer->id;
 
-    public function view(Request $request, $id)
-    {
-        $story = Story::findOrFail($id);
-        $userId = $request->user()->id;
-
-        if ($story->expires_at->isPast()) {
-            return response()->json(['message' => 'Story has expired'], 400);
-        }
-
-        $existingView = StoryView::where('story_id', $id)
-            ->where('viewer_id', $userId)
-            ->exists();
-
-        if (!$existingView) {
-            StoryView::create([
-                'story_id' => $id,
-                'viewer_id' => $userId,
-                'viewed_at' => now(),
-            ]);
-        }
-
-        return response()->json([
-            'message' => 'Story viewed successfully',
-            'views_count' => $story->views()->count()
-        ]);
+    if ($story->expires_at->isPast()) {
+        return response()->json(['message' => 'Story has expired'], 400);
     }
+
+    $existingView = StoryView::where('story_id', $id)
+        ->where('viewer_id', $userId)
+        ->exists();
+
+    if (!$existingView) {
+        StoryView::create([
+            'story_id' => $id,
+            'viewer_id' => $userId,
+            'viewed_at' => now(),
+        ]);
+
+        if (
+            $story->user_id != $userId &&
+            $viewer->role?->value === 'user' &&
+            $story->user?->role?->value === 'user'
+        ) {
+            $title = '';
+            $body = $viewer->name . ' viewed your story';
+
+            $data = [
+                'type' => 'story_view',
+                'story_id' => $story->id,
+                'viewer_id' => $viewer->id,
+                'click_action' => 'story_views',
+            ];
+
+            Notification::create([
+                'user_id' => $story->user_id,
+                'title' => $title,
+                'body' => $body,
+                'type' => 'story_view',
+                'data' => $data,
+                'is_read' => false,
+            ]);
+
+            $tokens = $story->user?->fcmTokens()->pluck('token')->toArray() ?? [];
+
+            if (!empty($tokens)) {
+                $firebaseService = new FirebaseNotificationService();
+                $firebaseService->send($tokens, $title, $body, $data);
+            }
+        }
+    }
+
+    return response()->json([
+        'message' => 'Story viewed successfully',
+        'views_count' => $story->views()->count()
+    ]);
+}
 
 
 

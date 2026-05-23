@@ -20,7 +20,7 @@ class User extends Authenticatable
         'phone',
         'profile_image',
         'address',
-         'bio',  
+        'bio',  
         'role',
     ];
 
@@ -55,15 +55,13 @@ class User extends Authenticatable
     public function followers()
     {
         return $this->belongsToMany(User::class, 'followers', 'following_id', 'follower_id')
-                    ->withPivot('rating')
-                    ->withTimestamps();
+                    ->withTimestamps(); // تم إزالة rating
     }
 
     public function following()
     {
         return $this->belongsToMany(User::class, 'followers', 'follower_id', 'following_id')
-                    ->withPivot('rating')
-                    ->withTimestamps();
+                    ->withTimestamps(); // تم إزالة rating
     }
 
     // ============================================================
@@ -91,34 +89,36 @@ class User extends Authenticatable
     }
 
     // ============================================================
-// دوال مساعدة
-// ============================================================
+    // دوال مساعدة إضافية
+    // ============================================================
 
-// ... الدوال الموجودة (isAdmin, isArtisan, etc)
+    public function getFollowersCountAttribute(): int
+    {
+        return $this->followers()->count();
+    }
 
-/**
- * Get followers count
- */
-public function getFollowersCountAttribute(): int
-{
-    return $this->followers()->count();
-}
+    public function getFollowingCountAttribute(): int
+    {
+        return $this->following()->count();
+    }
 
-/**
- * Get following count
- */
-public function getFollowingCountAttribute(): int
-{
-    return $this->following()->count();
-}
+    public function ratingsGiven()
+    {
+        return $this->hasMany(Rating::class, 'user_id');
+    }
 
-public function ratingsGiven()
-{
-    return $this->hasMany(Rating::class, 'user_id');
-}
+    public function ratingsReceived()
+    {
+        return $this->hasMany(Rating::class, 'artisan_id');
+    }
 
-public function ratingsReceived()
-{
-    return $this->hasMany(Rating::class, 'artisan_id');
-}
+    public function fcmTokens()
+    {
+        return $this->hasMany(\App\Models\UserFcmToken::class, 'user_id');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(\App\Models\Notification::class, 'user_id');
+    }
 }
