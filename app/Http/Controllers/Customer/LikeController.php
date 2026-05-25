@@ -9,6 +9,9 @@ use App\Models\Post;
 use App\Helpers\ActivityHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Models\Notification;
+use App\Models\User;
+use App\Services\FirebaseNotificationService;
 
 class LikeController extends Controller
 {
@@ -75,6 +78,46 @@ class LikeController extends Controller
                     $product->name
                 );
             }
+
+            if ($product && $product->seller_id != $userId) {
+
+    $actor = User::find($userId);
+    $seller = User::find($product->seller_id);
+
+    if (
+        $actor &&
+        $seller &&
+        $actor->role?->value === 'user' &&
+        $seller->role?->value === 'artisan'
+    ) {
+        $title = '';
+        $body = $actor->name . ' liked your product ' . $product->name;
+
+        $data = [
+            'type' => 'product_like',
+            'product_id' => $product->id,
+            'seller_id' => $seller->id,
+            'actor_id' => $actor->id,
+            'click_action' => 'product_page',
+        ];
+
+        Notification::create([
+            'user_id' => $seller->id,
+            'title' => $title,
+            'body' => $body,
+            'type' => 'product_like',
+            'data' => $data,
+            'is_read' => false,
+        ]);
+
+        $tokens = $seller->fcmTokens()->pluck('token')->toArray();
+
+        if (!empty($tokens)) {
+            $firebaseService = new FirebaseNotificationService();
+            $firebaseService->send($tokens, $title, $body, $data);
+        }
+    }
+}
         } elseif ($likeableType === 'App\\Models\\Post') {
             $post = Post::find($likeableId);
             if ($post && $post->user_id != $userId) {

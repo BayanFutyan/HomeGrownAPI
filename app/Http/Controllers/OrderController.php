@@ -12,7 +12,7 @@ class OrderController extends Controller
     {
         $userId = Auth::id();
 
-        $orders = Order::with(['items.product', 'items.details'])
+        $orders = Order::with(['items.product', 'items.details', 'seller'])
             ->where('customer_id', $userId)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -153,22 +153,40 @@ class OrderController extends Controller
         ]);
     }
 
-    private function formatOrders($orders)
-    {
-        return $orders->map(function ($order) {
-            return [
-                'id' => $order->id,
-                'order_number' => $order->order_number,
-                'order_date' => $order->created_at->format('M d, Y - h:i A'),
-                'status' => $order->status,
-                'status_label' => $this->getStatusLabel($order->status),
-                'total_items' => $order->items->sum('quantity'),
-                'total_amount' => $order->total_amount,
-                'payment_method' => $order->payment_method,
-                'shipping_address' => $order->shipping_address,
-            ];
-        });
-    }
+private function formatOrders($orders)
+{
+    return $orders->map(function ($order) {
+        return [
+            'id' => $order->id,
+            'order_number' => $order->order_number,
+            'order_date' => $order->created_at->format('M d, Y - h:i A'),
+            'status' => $order->status,
+            'status_label' => $this->getStatusLabel($order->status),
+            'total_items' => $order->items->sum('quantity'),
+            'total_amount' => $order->total_amount,
+            'payment_method' => $order->payment_method,
+            'shipping_address' => $order->shipping_address,
+            'seller' => [
+        'id' => $order->seller->id ?? null,
+        'name' => $order->seller->name ?? 'Artisan',
+        'profile_image' => $order->seller->profile_image ?? null,
+        'address' => $order->seller->address ?? null,
+    ],
+
+            'items' => $order->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product->name ?? 'Unknown',
+                    'product_image' => $item->product->image ?? null,
+                    'quantity' => $item->quantity,
+                    'price' => $item->product_price,
+                    'subtotal' => $item->subtotal,
+                ];
+            })->values(),
+        ];
+    })->values();
+}
 
     private function formatOrdersForSeller($orders)
     {

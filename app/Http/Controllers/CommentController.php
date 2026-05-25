@@ -102,6 +102,51 @@ class CommentController extends Controller
         }
     }
 }
+
+
+
+if (
+    !$request->parent_id &&
+    $commentableType === 'App\\Models\\Product'
+) {
+    $product = Product::with('seller')->find($commentableId);
+
+    if (
+        $product &&
+        $product->seller &&
+        $product->seller_id != $user->id &&
+        $user->role?->value === 'user' &&
+        $product->seller->role?->value === 'artisan'
+    ) {
+        $title = '';
+        $body = $user->name . ' commented on your product ' . $product->name;
+
+        $data = [
+            'type' => 'product_comment',
+            'product_id' => $product->id,
+            'comment_id' => $comment->id,
+            'actor_id' => $user->id,
+            'seller_id' => $product->seller_id,
+            'click_action' => 'product_page',
+        ];
+
+        Notification::create([
+            'user_id' => $product->seller_id,
+            'title' => $title,
+            'body' => $body,
+            'type' => 'product_comment',
+            'data' => $data,
+            'is_read' => false,
+        ]);
+
+        $tokens = $product->seller->fcmTokens()->pluck('token')->toArray();
+
+        if (!empty($tokens)) {
+            $firebaseService = new FirebaseNotificationService();
+            $firebaseService->send($tokens, $title, $body, $data);
+        }
+    }
+}
         // ✅ تسجيل نشاط التعليق
         $targetUserId = null;
         $activityType = null;

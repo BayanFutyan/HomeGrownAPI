@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use App\Models\Rating;
+use App\Models\Notification;
+use App\Services\FirebaseNotificationService;
 
 class UserController extends Controller
 {
@@ -475,6 +477,37 @@ if ($request->has('profile_image') && $request->profile_image) {
             'target_id' => $artisan->id,
             'target_title' => $artisan->name,
         ]);
+
+        if (
+    $user->role?->value === 'user' &&
+    $artisan->role?->value === 'artisan'
+) {
+    $title = '';
+    $body = $user->name . ' started following you';
+
+    $data = [
+        'type' => 'follow',
+        'actor_id' => $user->id,
+        'artisan_id' => $artisan->id,
+        'click_action' => 'profile_page',
+    ];
+
+    Notification::create([
+        'user_id' => $artisan->id,
+        'title' => $title,
+        'body' => $body,
+        'type' => 'follow',
+        'data' => $data,
+        'is_read' => false,
+    ]);
+
+    $tokens = $artisan->fcmTokens()->pluck('token')->toArray();
+
+    if (!empty($tokens)) {
+        $firebaseService = new FirebaseNotificationService();
+        $firebaseService->send($tokens, $title, $body, $data);
+    }
+}
 
         return response()->json(['message' => 'Followed successfully']);
     }

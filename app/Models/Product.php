@@ -57,7 +57,9 @@ class Product extends Model
      */
     public function offer()
     {
-        return $this->hasOne(Offer::class)->where('end_date', '>=', now());
+        return $this->hasOne(Offer::class)
+            ->where('start_date', '<=', now())
+            ->where('end_date', '>=', now());
     }
 
     public function likes()
@@ -108,7 +110,7 @@ class Product extends Model
     public function updateSaleStatus(): void
     {
         $hasActiveOffer = $this->offer()->exists();
-        
+
         if ($this->is_sale != $hasActiveOffer) {
             $this->update(['is_sale' => $hasActiveOffer]);
         }
@@ -134,6 +136,7 @@ class Product extends Model
         return $this->saves()->where('user_id', $userId)->exists();
     }
 
+
         // ============================================================
     // ✅ أحداث النموذج (Model Events) لتحديث likes_count تلقائياً
     // ============================================================
@@ -152,46 +155,46 @@ class Product extends Model
     /**
      * Boot the model
      */
-protected static function boot()
-{
-    parent::boot();
+    protected static function boot()
+    {
+        parent::boot();
 
-    static::created(function ($product) {
-        $seller = $product->seller;
-        $followers = $seller->followers()
-                            ->where('role', \App\Enums\UserRoleEnum::USER) // only normal users
-                            ->get();
+        static::created(function ($product) {
+            $seller = $product->seller;
+            $followers = $seller->followers()
+                ->where('role', \App\Enums\UserRoleEnum::USER) // only normal users
+                ->get();
 
-        $firebaseService = new \App\Services\FirebaseNotificationService();
+            $firebaseService = new \App\Services\FirebaseNotificationService();
 
-        foreach ($followers as $follower) {
-            \App\Models\Notification::create([
-                'user_id' => $follower->id,
-                'title' => 'New Product Added',
-                'body' => $seller->name . ' has added a new product: ' . $product->name,
-                'type' => 'new_product',
-                'data' => [
-                    'product_id' => $product->id,
-                    'seller_id' => $seller->id,
-                    'type' => 'new_product'
-                ],
-                'is_read' => false
-            ]);
-
-            $tokens = $follower->fcmTokens()->pluck('token')->toArray();
-            if (!empty($tokens)) {
-                $firebaseService->send(
-                    $tokens,
-                    'New Product Added',
-                    $seller->name . ' has added a new product: ' . $product->name,
-                    [
+            foreach ($followers as $follower) {
+                \App\Models\Notification::create([
+                    'user_id' => $follower->id,
+                    'title' => 'New Product Added',
+                    'body' => $seller->name . ' has added a new product: ' . $product->name,
+                    'type' => 'new_product',
+                    'data' => [
                         'product_id' => $product->id,
                         'seller_id' => $seller->id,
                         'type' => 'new_product'
-                    ]
-                );
+                    ],
+                    'is_read' => false
+                ]);
+
+                $tokens = $follower->fcmTokens()->pluck('token')->toArray();
+                if (!empty($tokens)) {
+                    $firebaseService->send(
+                        $tokens,
+                        'New Product Added',
+                        $seller->name . ' has added a new product: ' . $product->name,
+                        [
+                            'product_id' => $product->id,
+                            'seller_id' => $seller->id,
+                            'type' => 'new_product'
+                        ]
+                    );
+                }
             }
-        }
-    });
-}
+        });
+    }
 }

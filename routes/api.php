@@ -13,6 +13,8 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\ExhibitionController;
 use App\Http\Controllers\ExhibitionRegistrationController;
+use App\Http\Controllers\Customer\CartController;
+use App\Http\Controllers\Customer\CheckoutController;
 
 /*
 |--------------------------------------------------------------------------
@@ -108,6 +110,20 @@ Route::middleware('auth:sanctum')->group(function () {
     */
 
     Route::prefix('customer')->group(function () {
+
+ /*
+        |--------------------------------------------------------------------------
+        | Cart
+        |--------------------------------------------------------------------------
+        */
+     Route::get('/cart', [CartController::class, 'index']);
+    Route::post('/cart/items', [CartController::class, 'addItem']);
+    Route::patch('/cart/items/{id}', [CartController::class, 'updateQuantity']);
+    Route::patch('/cart/items/{id}/selection', [CartController::class, 'updateSelection']);
+    Route::patch('/cart/select-all', [CartController::class, 'selectAll']);
+    Route::delete('/cart/items/{id}', [CartController::class, 'destroy']);
+
+    Route::post('/orders/checkout', [CheckoutController::class, 'checkout']);
 
         /*
         |--------------------------------------------------------------------------

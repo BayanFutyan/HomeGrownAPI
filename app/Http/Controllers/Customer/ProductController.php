@@ -20,26 +20,29 @@ class ProductController extends Controller
         // ✅ دعم معامل filter من الـ Frontend
         if ($request->has('filter')) {
             $filter = $request->input('filter');
-            
+
             switch ($filter) {
                 case 'New':
                     $query->orderBy('created_at', 'desc');
                     break;
-                    
+
                 case 'Most Liked':
                     // ✅ ترتيب حسب عدد الإعجابات (من الأكبر إلى الأصغر)
                     $query->orderBy('likes_count', 'desc');
                     break;
-                    
+
                 case 'Offer':
-                    $query->where('is_sale', true)->orderBy('created_at', 'desc');
+                    $query->whereHas('offers', function ($q) {
+                        $q->where('start_date', '<=', now())
+                            ->where('end_date', '>=', now());
+                    })->orderBy('created_at', 'desc');
                     break;
-                    
+
                 case 'Near You':
                     // للموقع - حالياً نرتب حسب الأحدث
                     $query->orderBy('created_at', 'desc');
                     break;
-                    
+
                 default:
                     $query->orderBy('created_at', 'desc');
                     break;
@@ -59,7 +62,10 @@ class ProductController extends Controller
 
         // ✅ فلتر: المنتجات التي عليها تخفيض (is_sale)
         if ($request->has('is_sale') && filter_var($request->is_sale, FILTER_VALIDATE_BOOLEAN)) {
-            $query->where('is_sale', true);
+            $query->whereHas('offers', function ($q) {
+                $q->where('start_date', '<=', now())
+                    ->where('end_date', '>=', now());
+            });
         }
 
         // ✅ فلتر: حسب القسم (category)

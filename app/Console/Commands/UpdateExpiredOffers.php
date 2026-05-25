@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Product;
+use App\Models\Offer;
 
 class UpdateExpiredOffers extends Command
 {
@@ -12,20 +13,19 @@ class UpdateExpiredOffers extends Command
 
     public function handle()
     {
-        // جلب المنتجات التي عليها عرض ولكن العرض منتهي
-        $products = Product::where('is_sale', true)
-            ->whereHas('offer', function($q) {
-                $q->where('end_date', '<', now());
-            })
-            ->get();
-        
-        foreach ($products as $product) {
-            $product->update(['is_sale' => false]);
-            $this->info("Updated product ID {$product->id}: is_sale = false");
-        }
-        
-        $this->info("Updated {$products->count()} products");
-        
+        $expiredProductIds = Offer::where('end_date', '<', now())
+            ->pluck('product_id')
+            ->unique();
+
+        Product::whereIn('id', $expiredProductIds)->update([
+            'is_sale' => false,
+        ]);
+
+        Offer::where('end_date', '<', now())->delete();
+
+        $this->info('Updated expired offers successfully');
+
         return Command::SUCCESS;
     }
 }
+///php artisan schedule:work
