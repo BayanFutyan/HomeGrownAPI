@@ -197,4 +197,5 @@ class Product extends Model
             }
         });
     }
+    
 }

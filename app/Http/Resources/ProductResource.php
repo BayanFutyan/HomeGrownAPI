@@ -64,6 +64,12 @@ class ProductResource extends JsonResource
                 'discounted_price' => $this->getDiscountedPriceAttribute(),
                 'end_date' => $this->offer->end_date,
             ] : null,
+            'details' => $this->details->map(function ($detail) {
+                return [
+                    'name' => $detail->detail_name,
+                    'value' => $detail->detail_value,
+                ];
+            }),
 
             'created_at' => $this->created_at?->toDateTimeString(),
         ];

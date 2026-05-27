@@ -119,12 +119,15 @@ class SaveController extends Controller
             'saveable_id' => 'required|integer',
         ]);
 
-        $exists = Save::where('user_id', $request->user()->id)
+        $save = Save::where('user_id', $request->user()->id)
             ->where('saveable_type', $request->saveable_type)
             ->where('saveable_id', $request->saveable_id)
-            ->exists();
+            ->first();
 
-        return response()->json(['is_saved' => $exists]);
+        return response()->json([
+            'is_saved' => $save ? true : false,
+            'save_id' => $save?->id,
+        ]);
     }
 
     /**

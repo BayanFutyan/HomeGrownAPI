@@ -22,6 +22,7 @@ class CartController extends Controller
         $cart = $this->getCart($request)->load([
             'items.product.seller',
             'items.product.offer',
+            'items.product.details',
         ]);
 
         return response()->json([
@@ -89,7 +90,11 @@ class CartController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Item added to cart',
-            'data' => $item->load(['product.seller', 'product.offer']),
+            'data' => $item->load([
+                'product.seller',
+                'product.offer',
+                'product.details',
+            ]),
         ], 201);
     }
 
@@ -117,7 +122,11 @@ class CartController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Quantity updated successfully',
-            'data' => $item->load(['product.seller', 'product.offer']),
+            'data' => $item->load([
+                'product.seller',
+                'product.offer',
+                'product.details',
+            ]),
         ]);
     }
 

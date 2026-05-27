@@ -14,7 +14,7 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Product::with(['seller', 'offers'])
+        $query = Product::with(['seller', 'offers', 'details'])
             ->whereNull('deleted_at');
 
         // ✅ دعم معامل filter من الـ Frontend
