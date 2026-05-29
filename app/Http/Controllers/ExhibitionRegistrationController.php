@@ -11,7 +11,7 @@ use App\Models\Follower; // ✅ أضيفي هذا في الأعلى
 use App\Models\Rating;      // ✅ أضيفي هذا
 use App\Models\Product;     // ✅ أضيفي هذا
 use Illuminate\Support\Facades\Log;
-
+use App\Models\ExhibitionInterest;
 
 
 
@@ -279,5 +279,98 @@ public function getOwnerRegistrations()
         //
     }
 
+public function getArtisanRegistrations()
+{
+    $artisanId = auth()->id();
     
+    $registrations = ExhibitionRegistration::with(['exhibition.owner', 'seller'])
+        ->where('seller_id', $artisanId)
+        ->latest()
+        ->get();
+    
+    $result = [];
+    foreach ($registrations as $reg) {
+        $exhibition = $reg->exhibition;
+        $owner = $exhibition->owner;
+        
+        // ✅ حساب عدد المهتمين بهذا المعرض (نفس طريقة index)
+        $interestsCount = ExhibitionInterest::where('exhibition_id', $exhibition->id)->count();
+        
+        $result[] = [
+            'id' => $reg->id,
+            'exhibition_id' => $reg->exhibition_id,
+            'seller_id' => $reg->seller_id,
+            'type' => $reg->type,
+            'status' => $reg->status,
+            'created_at' => $reg->created_at,
+            'updated_at' => $reg->updated_at,
+            'exhibition' => [
+                'id' => $exhibition->id,
+                'title' => $exhibition->title,
+                'description' => $exhibition->description,
+                'location' => $exhibition->location,
+                'image' => $exhibition->image,
+                'start_date' => $exhibition->start_date,
+                'end_date' => $exhibition->end_date,
+                'type' => $exhibition->type,
+                'participants_count' => $interestsCount,  // ✅ أضيفي هذا السطر
+                'owner' => [
+                    'id' => $owner->id,
+                    'name' => $owner->name,
+                ],
+            ],
+            'seller' => [
+                'id' => $reg->seller->id,
+                'name' => $reg->seller->name,
+                'profile_image' => $reg->seller->profile_image,
+            ],
+        ];
+    }
+    
+    return response()->json(['data' => $result]);
+}
+
+public function applyToExhibition(Request $request)
+{
+    $validated = $request->validate([
+        'exhibition_id' => 'required|exists:exhibitions,id',
+    ]);
+
+    $artisanId = auth()->id();
+    $exhibitionId = $validated['exhibition_id'];
+
+    // ✅ التأكد أن المعرض موجود وعام
+    $exhibition = Exhibition::find($exhibitionId);
+    
+    if (!$exhibition) {
+        return response()->json(['message' => 'Exhibition not found'], 404);
+    }
+    
+    if ($exhibition->type !== 'public') {
+        return response()->json(['message' => 'This exhibition is not public'], 403);
+    }
+
+    // ✅ التأكد ما في طلب سابق
+    $existing = ExhibitionRegistration::where('exhibition_id', $exhibitionId)
+        ->where('seller_id', $artisanId)
+        ->first();
+
+    if ($existing) {
+        return response()->json(['message' => 'You already applied or were invited'], 400);
+    }
+
+    // ✅ إنشاء طلب جديد
+    $registration = ExhibitionRegistration::create([
+        'exhibition_id' => $exhibitionId,
+        'seller_id' => $artisanId,
+        'type' => 'request',
+        'status' => 'pending',
+    ]);
+
+    return response()->json([
+        'message' => 'Application submitted successfully',
+        'data' => $registration
+    ], 201);
+}
+
 }

@@ -258,8 +258,44 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     */
 
+    Route::post('/apply-to-exhibition', [ExhibitionRegistrationController::class, 'applyToExhibition']);
+    Route::get('/public-exhibitions', [ExhibitionController::class, 'getPublicExhibitions']);
+    Route::get('/my-artisan-registrations', [ExhibitionRegistrationController::class, 'getArtisanRegistrations']);
     Route::apiResource('exhibitions', ExhibitionController::class);
     Route::get('/my-exhibitions', [ExhibitionController::class, 'myExhibitions']);
+    Route::post('/exhibitions/{id}/interested', [ExhibitionController::class, 'markInterested']);
+    Route::post('/exhibitions/{id}/upload-image', [ExhibitionController::class, 'uploadImage']);
+    Route::get(
+        '/exhibitions/owner/{ownerId}',
+        [ExhibitionController::class, 'getByOwner']
+    );
+    Route::post('/exhibitions/{id}/interested', [ExhibitionController::class, 'markInterested']);
+    Route::get('/exhibitions/{id}/check-interested', [ExhibitionController::class, 'checkInterested']);
+    Route::get('/user/interests', [ExhibitionController::class, 'getUserInterests']);
+    Route::post(
+        '/exhibitions/{exhibitionId}/invite-artisan',
+        [ExhibitionRegistrationController::class, 'inviteArtisan']
+    );
+
+    Route::get(
+        '/exhibitions/{exhibitionId}/registrations',
+        [ExhibitionRegistrationController::class, 'getExhibitionRegistrations']
+    );
+
+    
+
+    Route::put(
+        '/exhibition-registrations/{registrationId}/status',
+        [ExhibitionRegistrationController::class, 'updateStatus']
+    );
+
+    // Route::get(
+    //     '/owners/{ownerId}/registrations',
+    //     [ExhibitionRegistrationController::class, 'getOwnerRegistrations']
+    // );
+
+    Route::get('/my-registrations', 
+    [ExhibitionRegistrationController::class, 'getOwnerRegistrations']);
     Route::post('/exhibitions/{id}/upload-image', [ExhibitionController::class, 'uploadImage']);
     Route::get('/exhibitions/owner/{ownerId}', [ExhibitionController::class, 'getByOwner']);
     Route::post('/exhibitions/{exhibitionId}/invite-artisan', [ExhibitionRegistrationController::class, 'inviteArtisan']);
