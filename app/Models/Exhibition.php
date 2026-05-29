@@ -26,4 +26,15 @@ class Exhibition extends Model
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
+    // ✅ أضيفي هذه العلاقة مع ExhibitionInterest
+public function interests()
+{
+    return $this->hasMany(ExhibitionInterest::class);
+}
+
+// ✅ حساب عدد المهتمين
+public function getParticipantsCountAttribute()
+{
+    return $this->interests()->count();
+}
 }

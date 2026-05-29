@@ -6,6 +6,7 @@ use App\Models\Exhibition;
 use Illuminate\Http\Request;
 use App\Enums\UserRoleEnum;
 use App\Models\User;
+use App\Models\ExhibitionInterest;  // ✅ أضيفي هذا
 
 class ExhibitionController extends Controller
 {
@@ -63,18 +64,29 @@ public function getByOwner($ownerId, Request $request)
             'exhibitions_count' => $exhibitions->count(),
         ],
 
-        'data' => $exhibitions,
+        'data' => $exhibitions->map(function ($exhibition) {
+            // ✅ حساب عدد المهتمين بهذا المعرض
+            $interestsCount = ExhibitionInterest::where('exhibition_id', $exhibition->id)->count();
+            
+            return [
+                'id' => $exhibition->id,
+                'owner_id' => $exhibition->owner_id,
+                'title' => $exhibition->title,
+                'description' => $exhibition->description,
+                'image' => $exhibition->image,
+                'start_date' => $exhibition->start_date,
+                'end_date' => $exhibition->end_date,
+                'status' => $exhibition->status,
+                'type' => $exhibition->type,
+                'location' => $exhibition->location,
+                'participants_count' => $interestsCount,  // ✅ عدد المهتمين
+                'created_at' => $exhibition->created_at,
+                'updated_at' => $exhibition->updated_at,
+            ];
+        }),
     ]);
 }
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        $exhibitions = Exhibition::with('owner')->latest()->get();
 
-        return response()->json($exhibitions);
-    }
 
     /**
      * Show the form for creating a new resource.
@@ -197,28 +209,47 @@ public function store(Request $request)
         ]);
     }
 
-    public function myExhibitions(Request $request)
-    {
-        $user = $request->user();
+ public function myExhibitions(Request $request)
+{
+    $user = $request->user();
 
-        $userRole = $user->role instanceof UserRoleEnum
-            ? $user->role->value
-            : $user->role;
+    $userRole = $user->role instanceof UserRoleEnum
+        ? $user->role->value
+        : $user->role;
 
-        if ($userRole !== UserRoleEnum::EXHIBITION_OWNER->value) {
-            return response()->json([
-                'message' => 'Only exhibition owners can view their exhibitions.'
-            ], 403);
-        }
-
-        $exhibitions = Exhibition::where('owner_id', $user->id)
-            ->latest()
-            ->get();
-
+    if ($userRole !== UserRoleEnum::EXHIBITION_OWNER->value) {
         return response()->json([
-            'data' => $exhibitions
-        ]);
+            'message' => 'Only exhibition owners can view their exhibitions.'
+        ], 403);
     }
+
+    $exhibitions = Exhibition::where('owner_id', $user->id)
+        ->latest()
+        ->get();
+
+    return response()->json([
+        'data' => $exhibitions->map(function ($exhibition) {
+            // ✅ حساب عدد المهتمين
+            $interestsCount = ExhibitionInterest::where('exhibition_id', $exhibition->id)->count();
+            
+            return [
+                'id' => $exhibition->id,
+                'owner_id' => $exhibition->owner_id,
+                'title' => $exhibition->title,
+                'description' => $exhibition->description,
+                'image' => $exhibition->image,
+                'start_date' => $exhibition->start_date,
+                'end_date' => $exhibition->end_date,
+                'status' => $exhibition->status,
+                'type' => $exhibition->type,
+                'location' => $exhibition->location,
+                'participants_count' => $interestsCount,  // ✅ أضيفي هذا
+                'created_at' => $exhibition->created_at,
+                'updated_at' => $exhibition->updated_at,
+            ];
+        }),
+    ]);
+}
 
 public function updateWithImage(Request $request, $id)
 {
@@ -291,6 +322,115 @@ public function uploadImage(Request $request, $id)
             'message' => $e->getMessage()
         ], 500);
     }
+}
+public function getPublicExhibitions()
+{
+    $exhibitions = Exhibition::with('owner')  // ✅ أضيفي هذا لجلب بيانات صاحب المعرض
+        ->where('type', 'public')
+        ->whereIn('status', ['upcoming', 'active'])
+        ->latest()
+        ->get();
+        
+    return response()->json(['data' => $exhibitions]);
+}
+public function markInterested($id)
+{
+    $user = auth()->user();
+    $exhibition = Exhibition::find($id);
+    
+    if (!$exhibition) {
+        return response()->json(['message' => 'Exhibition not found'], 404);
+    }
+    
+    // ✅ التحقق إذا كان مهتم مسبقاً
+    $existing = ExhibitionInterest::where('exhibition_id', $id)
+        ->where('user_id', $user->id)
+        ->exists();
+    
+    if ($existing) {
+        return response()->json(['message' => 'Already interested'], 400);
+    }
+    
+    // ✅ إضافة اهتمام جديد
+    ExhibitionInterest::create([
+        'exhibition_id' => $id,
+        'user_id' => $user->id,
+    ]);
+    
+    return response()->json([
+        'message' => 'Interest recorded successfully',
+        'participants_count' => $exhibition->interests()->count(),
+    ]);
+}
+
+public function checkInterested($id)
+{
+    $user = auth()->user();
+    
+    $isInterested = ExhibitionInterest::where('exhibition_id', $id)
+        ->where('user_id', $user->id)
+        ->exists();
+    
+    return response()->json([
+        'interested' => $isInterested,
+    ]);
+}
+public function index()
+{
+    try {
+        $exhibitions = Exhibition::with('owner')->latest()->get();
+
+        return response()->json([
+            'data' => $exhibitions->map(function ($exhibition) {
+                // ✅ حساب عدد المهتمين يدوياً
+                $interestsCount = ExhibitionInterest::where('exhibition_id', $exhibition->id)->count();
+
+                return [
+                    'id' => $exhibition->id,
+                    'owner_id' => $exhibition->owner_id,
+                    'title' => $exhibition->title,
+                    'description' => $exhibition->description,
+                    'image' => $exhibition->image,
+                    'start_date' => $exhibition->start_date,
+                    'end_date' => $exhibition->end_date,
+                    'status' => $exhibition->status,
+                    'type' => $exhibition->type,
+                    'location' => $exhibition->location,
+                    'participants_count' => $interestsCount,
+                    'created_at' => $exhibition->created_at,
+                    'updated_at' => $exhibition->updated_at,
+                    'owner' => $exhibition->owner ? [
+                        'id' => $exhibition->owner->id,
+                        'name' => $exhibition->owner->name,
+                        'profile_image' => $exhibition->owner->profile_image,
+                    ] : null,
+                ];
+            }),
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => $e->getMessage(),
+            'line' => $e->getLine(),
+            'file' => $e->getFile()
+        ], 500);
+    }
+}
+
+// ✅ جلب معارض المستخدم المهتم فيها
+public function getUserInterests()
+{
+    $user = auth()->user();
+    
+    $interests = ExhibitionInterest::with('exhibition.owner')
+        ->where('user_id', $user->id)
+        ->get();
+    
+    return response()->json([
+        'data' => $interests->map(function ($interest) {
+            return $interest->exhibition;
+        }),
+    ]);
 }
 
 }
