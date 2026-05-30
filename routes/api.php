@@ -15,6 +15,7 @@ use App\Http\Controllers\ExhibitionController;
 use App\Http\Controllers\ExhibitionRegistrationController;
 use App\Http\Controllers\Customer\CartController;
 use App\Http\Controllers\Customer\CheckoutController;
+use App\Http\Controllers\AnalyticsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -111,19 +112,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('customer')->group(function () {
 
- /*
+        /*
         |--------------------------------------------------------------------------
         | Cart
         |--------------------------------------------------------------------------
         */
-     Route::get('/cart', [CartController::class, 'index']);
-    Route::post('/cart/items', [CartController::class, 'addItem']);
-    Route::patch('/cart/items/{id}', [CartController::class, 'updateQuantity']);
-    Route::patch('/cart/items/{id}/selection', [CartController::class, 'updateSelection']);
-    Route::patch('/cart/select-all', [CartController::class, 'selectAll']);
-    Route::delete('/cart/items/{id}', [CartController::class, 'destroy']);
+        Route::get('/cart', [CartController::class, 'index']);
+        Route::post('/cart/items', [CartController::class, 'addItem']);
+        Route::patch('/cart/items/{id}', [CartController::class, 'updateQuantity']);
+        Route::patch('/cart/items/{id}/selection', [CartController::class, 'updateSelection']);
+        Route::patch('/cart/select-all', [CartController::class, 'selectAll']);
+        Route::delete('/cart/items/{id}', [CartController::class, 'destroy']);
 
-    Route::post('/orders/checkout', [CheckoutController::class, 'checkout']);
+        Route::post('/orders/checkout', [CheckoutController::class, 'checkout']);
 
         /*
         |--------------------------------------------------------------------------
@@ -162,7 +163,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Rating
         Route::post('/artisans/{id}/rate', [UserController::class, 'rateArtisan']);
         Route::get('/artisans/{id}/my-rating', [UserController::class, 'getMyRatingForArtisan']);
-        
+
         /*
         |--------------------------------------------------------------------------
         | Products
@@ -282,7 +283,7 @@ Route::middleware('auth:sanctum')->group(function () {
         [ExhibitionRegistrationController::class, 'getExhibitionRegistrations']
     );
 
-    
+
 
     Route::put(
         '/exhibition-registrations/{registrationId}/status',
@@ -294,8 +295,10 @@ Route::middleware('auth:sanctum')->group(function () {
     //     [ExhibitionRegistrationController::class, 'getOwnerRegistrations']
     // );
 
-    Route::get('/my-registrations', 
-    [ExhibitionRegistrationController::class, 'getOwnerRegistrations']);
+    Route::get(
+        '/my-registrations',
+        [ExhibitionRegistrationController::class, 'getOwnerRegistrations']
+    );
     Route::post('/exhibitions/{id}/upload-image', [ExhibitionController::class, 'uploadImage']);
     Route::get('/exhibitions/owner/{ownerId}', [ExhibitionController::class, 'getByOwner']);
     Route::post('/exhibitions/{exhibitionId}/invite-artisan', [ExhibitionRegistrationController::class, 'inviteArtisan']);
@@ -310,7 +313,17 @@ Route::middleware('auth:sanctum')->group(function () {
 |--------------------------------------------------------------------------
 */
 
+
 Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(function () {
+
+    /*
+|--------------------------------------------------------------------------
+| Analytics
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/analytics', [AnalyticsController::class, 'index']);
+
 
     /*
     |--------------------------------------------------------------------------
