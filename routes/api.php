@@ -99,6 +99,11 @@ Route::middleware('auth:sanctum')->group(function () {
     */
 
     Route::post('/fcm-token', [FcmTokenController::class, 'store']);
+  Route::get('/users', function () {
+    return response()->json(
+        \App\Models\User::all(['id', 'name', 'role', 'email', 'profile_image'])
+    );
+});
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
