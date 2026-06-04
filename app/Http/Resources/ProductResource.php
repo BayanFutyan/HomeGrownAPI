@@ -40,6 +40,11 @@ class ProductResource extends JsonResource
             'comments_count' => $this->comments_count,
             'is_sale' => (bool) $this->is_sale,
             'sales_count' => $this->sales_count,
+            'ai_score' => $this->ai_score,
+            'positive_comments' => $this->positive_comments,
+            'neutral_comments' => $this->neutral_comments,
+            'negative_comments' => $this->negative_comments,
+            'sentiment_label' => $this->sentiment_label,
 
             'is_liked' => $this->when(
                 $request->user(),

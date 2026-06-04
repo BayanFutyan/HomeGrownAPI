@@ -16,6 +16,8 @@ use App\Http\Controllers\ExhibitionRegistrationController;
 use App\Http\Controllers\Customer\CartController;
 use App\Http\Controllers\Customer\CheckoutController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\RecommendationController;
+use App\Http\Controllers\CommentSentimentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,7 +27,6 @@ use App\Http\Controllers\AnalyticsController;
 
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
-
 /*
 |--------------------------------------------------------------------------
 | Public Routes (بدون توكن - للجميع)
@@ -256,7 +257,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/check-save', [\App\Http\Controllers\Customer\SaveController::class, 'check']);
 
         Route::post('/save-count', [\App\Http\Controllers\Customer\SaveController::class, 'count']);
+
+        
     });
+    // ✅ Route جديد للتوصيات
+    Route::get('/recommendations/{userId}', [RecommendationController::class, 'getRecommendations']);
 
     /*
     |--------------------------------------------------------------------------
@@ -267,6 +272,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/apply-to-exhibition', [ExhibitionRegistrationController::class, 'applyToExhibition']);
     Route::get('/public-exhibitions', [ExhibitionController::class, 'getPublicExhibitions']);
     Route::get('/my-artisan-registrations', [ExhibitionRegistrationController::class, 'getArtisanRegistrations']);
+    Route::get('/artisan-upcoming-exhibitions', [ExhibitionRegistrationController::class, 'getArtisanUpcomingExhibitions']);
+
     Route::apiResource('exhibitions', ExhibitionController::class);
     Route::get('/my-exhibitions', [ExhibitionController::class, 'myExhibitions']);
     Route::post('/exhibitions/{id}/interested', [ExhibitionController::class, 'markInterested']);
@@ -328,7 +335,7 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
 */
 
     Route::get('/analytics', [AnalyticsController::class, 'index']);
-
+    Route::apiResource('product-details', ProductDetailController::class)->only(['store', 'destroy']);
 
     /*
     |--------------------------------------------------------------------------
@@ -388,6 +395,7 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
     */
 
     Route::get('/products/{id}/comments', [ProductController::class, 'getArtisanComments']);
+    
 });
 
 /*

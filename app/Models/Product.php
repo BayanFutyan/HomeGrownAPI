@@ -26,6 +26,11 @@ class Product extends Model
         'likes_count',
         'is_sale',
         'sales_count',
+        'ai_score',
+        'positive_comments',
+        'neutral_comments',
+        'negative_comments',
+        'sentiment_label',
     ];
 
     protected $casts = [
@@ -197,5 +202,4 @@ class Product extends Model
             }
         });
     }
-    
 }

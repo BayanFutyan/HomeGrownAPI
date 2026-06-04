@@ -44,48 +44,55 @@ class NotificationController extends Controller
     }
 
     // جلب إشعارات المستخدم الحالي
-    public function index(Request $request)
-    {
-        $user = $request->user();
-        
-        $notifications = Notification::where('user_id', $user->id)
-            ->latest()
-            ->get()
-            ->map(function ($n) {
-                $seller = null;
-                $userProfileImage = null;
-                
-                // إذا كان فيه seller_id في البيانات
-                if (isset($n->data['seller_id'])) {
-                    $seller = User::find($n->data['seller_id']);
-                    if ($seller && $seller->profile_image) {
-                        // ✅ إذا كانت الصورة مخزنة كاملة مع المسار
-                        if (str_contains($seller->profile_image, 'http')) {
-                            $userProfileImage = $seller->profile_image;
-                        } else {
-                            // ✅ إذا كانت الصورة مخزنة كمسار نسبي
-                            $userProfileImage = url($seller->profile_image);
-                        }
+public function index(Request $request)
+{
+    $user = $request->user();
+
+    $notifications = Notification::where('user_id', $user->id)
+        ->latest()
+        ->get()
+        ->map(function ($n) {
+            $sender = null;
+            $userProfileImage = null;
+
+            $data = is_array($n->data) ? $n->data : json_decode($n->data, true);
+
+            $senderId =
+                $data['seller_id'] ??
+                $data['actor_id'] ??
+                $data['artisan_id'] ??
+                $data['owner_id'] ??
+                null;
+
+            if ($senderId) {
+                $sender = User::find($senderId);
+
+                if ($sender && $sender->profile_image) {
+                    if (str_contains($sender->profile_image, 'http')) {
+                        $userProfileImage = $sender->profile_image;
+                    } else {
+                        $userProfileImage = url($sender->profile_image);
                     }
                 }
-                
-                // ✅ صورة افتراضية إذا ما في صورة
-                if (!$userProfileImage) {
-                    $userProfileImage = url('images/avatars/avatar2.jpg');
-                }
+            }
 
-                return [
-                    'id' => $n->id,
-                    'title' => $n->title,
-                    'body' => $n->body,
-                    'is_read' => $n->is_read,
-                    'time' => $n->created_at->diffForHumans(),
-                    'user_profile_image' => $userProfileImage,
-                ];
-            });
+            if (!$userProfileImage) {
+                $userProfileImage = url('images/avatars/avatar2.jpg');
+            }
 
-        return response()->json(['data' => $notifications]);
-    }
+            return [
+                'id' => $n->id,
+                'title' => $n->title,
+                'body' => $n->body,
+                'is_read' => $n->is_read,
+                'time' => $n->created_at->diffForHumans(),
+                'user_profile_image' => $userProfileImage,
+                'data' => $data,
+            ];
+        });
+
+    return response()->json(['data' => $notifications]);
+}
 
     // تعليم إشعار كمقروء
     public function markAsRead(Request $request, $id)

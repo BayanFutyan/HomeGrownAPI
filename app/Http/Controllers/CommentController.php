@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Notification;
 use App\Services\FirebaseNotificationService;
+use App\Services\CommentAnalysisService;
 
 class CommentController extends Controller
 {
@@ -61,12 +62,23 @@ class CommentController extends Controller
             'parent_id' => $request->parent_id,
             'likes_count' => 0,
         ]);
+        if (
+    $commentableType === Product::class &&
+    $request->parent_id === null
+) {
+    $product = Product::find($commentableId);
+
+    if ($product) {
+        app(CommentAnalysisService::class)
+            ->analyzeProduct($product);
+    }
+}
 
 
         if ($request->parent_id) {
-    $parentComment = Comment::with('user')->find($request->parent_id);
+     $parentComment = Comment::with('user')->find($request->parent_id);
 
-    if ($parentComment && $parentComment->user_id != $user->id) {
+     if ($parentComment && $parentComment->user_id != $user->id) {
         $product = null;
 
         if ($commentableType === 'App\\Models\\Product') {
