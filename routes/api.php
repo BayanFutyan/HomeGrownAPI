@@ -18,6 +18,7 @@ use App\Http\Controllers\Customer\CheckoutController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\RecommendationController;
 use App\Http\Controllers\CommentSentimentController;
+use App\Http\Controllers\FavoriteArtisanController;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,6 +47,7 @@ Route::get('/offers/{id}', [OfferController::class, 'show']);
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+
 
     /*
     |--------------------------------------------------------------------------
@@ -101,11 +103,11 @@ Route::middleware('auth:sanctum')->group(function () {
     */
 
     Route::post('/fcm-token', [FcmTokenController::class, 'store']);
-  Route::get('/users', function () {
-    return response()->json(
-        \App\Models\User::all(['id', 'name', 'role', 'email', 'profile_image'])
-    );
-});
+    Route::get('/users', function () {
+        return response()->json(
+            \App\Models\User::all(['id', 'name', 'role', 'email', 'profile_image'])
+        );
+    });
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
@@ -257,11 +259,19 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/check-save', [\App\Http\Controllers\Customer\SaveController::class, 'check']);
 
         Route::post('/save-count', [\App\Http\Controllers\Customer\SaveController::class, 'count']);
-
-        
     });
     // ✅ Route جديد للتوصيات
     Route::get('/recommendations/{userId}', [RecommendationController::class, 'getRecommendations']);
+
+
+    /*
+|--------------------------------------------------------------------------
+| Favorite Artisans
+|--------------------------------------------------------------------------
+*/
+
+    Route::get('/favorite-artisans', [FavoriteArtisanController::class, 'index']);
+    Route::post('/favorite-artisans/toggle', [FavoriteArtisanController::class, 'toggle']);
 
     /*
     |--------------------------------------------------------------------------
@@ -288,6 +298,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post(
         '/exhibitions/{exhibitionId}/invite-artisan',
         [ExhibitionRegistrationController::class, 'inviteArtisan']
+
     );
 
     Route::get(
@@ -295,7 +306,10 @@ Route::middleware('auth:sanctum')->group(function () {
         [ExhibitionRegistrationController::class, 'getExhibitionRegistrations']
     );
 
-
+    Route::get(
+        '/exhibition-owner/artisan-discovery',
+        [ExhibitionRegistrationController::class, 'artisanDiscovery']
+    );
 
     Route::put(
         '/exhibition-registrations/{registrationId}/status',
@@ -318,6 +332,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/exhibition-registrations/{registrationId}/status', [ExhibitionRegistrationController::class, 'updateStatus']);
     Route::get('/my-registrations', [ExhibitionRegistrationController::class, 'getOwnerRegistrations']);
 });
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -395,7 +411,6 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
     */
 
     Route::get('/products/{id}/comments', [ProductController::class, 'getArtisanComments']);
-    
 });
 
 /*
