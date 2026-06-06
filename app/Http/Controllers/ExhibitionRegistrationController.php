@@ -44,15 +44,30 @@ class ExhibitionRegistrationController extends Controller
             ], 403);
         }
 
-        $alreadyInvited = ExhibitionRegistration::where('exhibition_id', $exhibition->id)
-            ->where('seller_id', $seller->id)
-            ->exists();
+   $existingRegistration = ExhibitionRegistration::where('exhibition_id', $exhibition->id)
+    ->where('seller_id', $seller->id)
+    ->first();
 
-        if ($alreadyInvited) {
-            return response()->json([
-                'message' => 'This artisan is already invited or registered for this exhibition.'
-            ], 400);
-        }
+if ($existingRegistration) {
+    if ($existingRegistration->type === 'request') {
+        return response()->json([
+            'message' => 'This artisan has already requested to join this exhibition. Please review the request from the Requests page.',
+            'reason' => 'already_requested',
+        ], 409);
+    }
+
+    if ($existingRegistration->type === 'invitation') {
+        return response()->json([
+            'message' => 'This artisan has already been invited to this exhibition.',
+            'reason' => 'already_invited',
+        ], 409);
+    }
+
+    return response()->json([
+        'message' => 'This artisan is already registered for this exhibition.',
+        'reason' => 'already_registered',
+    ], 409);
+}
 
         $invitation = ExhibitionRegistration::create([
             'exhibition_id' => $exhibition->id,
@@ -218,14 +233,14 @@ class ExhibitionRegistrationController extends Controller
                     $title = '✅ Join Request Accepted';
                     $body = $owner->name . ' accepted your request to join exhibition "' . $registration->exhibition->title . '"';
 
-                   $data = [
-    'type' => 'exhibition_join_accepted',
-    'exhibition_id' => $registration->exhibition_id,
-    'registration_id' => $registration->id,
-    'owner_id' => $owner->id,
-    'actor_id' => $owner->id,
-    'click_action' => 'exhibition_page',
-];
+                    $data = [
+                        'type' => 'exhibition_join_accepted',
+                        'exhibition_id' => $registration->exhibition_id,
+                        'registration_id' => $registration->id,
+                        'owner_id' => $owner->id,
+                        'actor_id' => $owner->id,
+                        'click_action' => 'exhibition_page',
+                    ];
 
                     Notification::create([
                         'user_id' => $artisan->id,
@@ -275,7 +290,7 @@ class ExhibitionRegistrationController extends Controller
                     }
                 }
             }
-         } elseif ($oldStatus !== $validated['status'] && $validated['status'] === 'rejected') {
+        } elseif ($oldStatus !== $validated['status'] && $validated['status'] === 'rejected') {
             // إشعار بالرفض
             $notifyUser = null;
             if ($registration->type === 'request') {
@@ -290,14 +305,14 @@ class ExhibitionRegistrationController extends Controller
                 $title = '❌ Request Rejected';
                 $body = $message;
 
-               $data = [
-    'type' => 'exhibition_request_rejected',
-    'exhibition_id' => $registration->exhibition_id,
-    'registration_id' => $registration->id,
-    'owner_id' => $actor->id,
-    'actor_id' => $actor->id,
-    'click_action' => 'exhibition_page',
-];
+                $data = [
+                    'type' => 'exhibition_request_rejected',
+                    'exhibition_id' => $registration->exhibition_id,
+                    'registration_id' => $registration->id,
+                    'owner_id' => $actor->id,
+                    'actor_id' => $actor->id,
+                    'click_action' => 'exhibition_page',
+                ];
                 Notification::create([
                     'user_id' => $notifyUser->id,
                     'title' => $title,
@@ -313,9 +328,9 @@ class ExhibitionRegistrationController extends Controller
                     $firebaseService->send($tokens, $title, $body, $data);
                 }
             }
-         }
+        }
 
-         return response()->json([
+        return response()->json([
             'message' => 'Status updated successfully',
             'data' => $registration
         ]);
@@ -560,6 +575,107 @@ class ExhibitionRegistrationController extends Controller
 
         return response()->json([
             'data' => $registrations
+        ]);
+    }
+
+
+
+    public function artisanDiscovery(Request $request)
+    {
+        $ownerId = auth()->id();
+        
+
+        $search = $request->query('search');
+        $status = $request->query('status', 'all');
+        $selectedExhibitionId = $request->query('exhibition_id');
+
+        if ($selectedExhibitionId) {
+            $ownerExhibitionIds = Exhibition::where('owner_id', $ownerId)
+                ->where('id', $selectedExhibitionId)
+                ->pluck('id');
+        } else {
+            $ownerExhibitionIds = Exhibition::where('owner_id', $ownerId)->pluck('id');
+        }
+
+        $query = User::where('role', 'artisan')
+            ->with(['products' => function ($q) {
+                $q->latest()->limit(1);
+            }]);
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%$search%")
+                    ->orWhere('bio', 'like', "%$search%")
+                    ->orWhere('address', 'like', "%$search%")
+                    ->orWhereHas('products', function ($p) use ($search) {
+                        $p->where('name', 'like', "%$search%")
+                            ->orWhere('category', 'like', "%$search%");
+                    });
+            });
+        }
+
+        $artisans = $query->get()->map(function ($artisan) use ($ownerExhibitionIds) {
+            $registration = ExhibitionRegistration::with('exhibition')
+                ->whereIn('exhibition_id', $ownerExhibitionIds)
+                ->where('seller_id', $artisan->id)
+                ->where('type', 'invitation')
+                ->latest()
+                ->first();
+
+            $invitationStatus = 'not_invited';
+
+            if ($registration) {
+                if ($registration->status === 'pending') {
+                    $invitationStatus = 'invitation_sent';
+                } elseif ($registration->status === 'accepted') {
+                    $invitationStatus = 'accepted';
+                } elseif ($registration->status === 'rejected') {
+                    $invitationStatus = 'declined';
+                }
+            }
+
+            return [
+                'id' => $artisan->id,
+                'name' => $artisan->name,
+                'email' => $artisan->email,
+                'phone' => $artisan->phone,
+                'profile_image' => $artisan->profile_image ? url('/' . $artisan->profile_image) : null,
+                'address' => $artisan->address,
+                'bio' => $artisan->bio,
+                'role' => $artisan->role,
+                'followers_count' => $artisan->followers()->count(),
+                'following_count' => $artisan->following()->count(),
+                'average_rating' => round($artisan->ratingsReceived()->avg('rating') ?? 0, 1),
+                'ratings_count' => $artisan->ratingsReceived()->count(),
+                'invitation_status' => $invitationStatus,
+                'registration_id' => $registration?->id,
+                'exhibition_id' => $registration?->exhibition_id,
+                'exhibition_title' => $registration?->exhibition?->title,
+                'products' => $artisan->products,
+                'created_at' => $artisan->created_at,
+                'updated_at' => $artisan->updated_at,
+                'total_sales' => $artisan->products()->sum('sales_count'),
+            ];
+        });
+
+        if ($status !== 'all') {
+            $artisans = $artisans->where('invitation_status', $status)->values();
+        }
+
+        $stats = [
+            'all' => $artisans->count(),
+            'not_invited' => $artisans->where('invitation_status', 'not_invited')->count(),
+            'invitation_sent' => $artisans->where('invitation_status', 'invitation_sent')->count(),
+            'accepted' => $artisans->where('invitation_status', 'accepted')->count(),
+            'declined' => $artisans->where('invitation_status', 'declined')->count(),
+        ];
+
+        return response()->json([
+            'data' => [
+                'stats' => $stats,
+                'artisans' => $artisans->values(),
+            ],
+            'message' => 'Artisan discovery loaded successfully',
         ]);
     }
 }
