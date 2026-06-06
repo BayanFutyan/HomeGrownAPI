@@ -27,6 +27,13 @@ use App\Http\Controllers\CommentSentimentController;
 
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
+
+Route::post('/register/send-code', [UserController::class, 'sendRegisterCode']);
+Route::post('/register/verify-code', [UserController::class, 'verifyRegisterCode']);
+
+Route::post('/forgot-password/send-code', [UserController::class, 'sendResetCode']);
+Route::post('/forgot-password/verify-code', [UserController::class, 'verifyResetCode']);
+Route::post('/forgot-password/reset', [UserController::class, 'resetPassword']);
 /*
 |--------------------------------------------------------------------------
 | Public Routes (بدون توكن - للجميع)

@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Rating;
 use App\Models\Notification;
 use App\Services\FirebaseNotificationService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -548,4 +551,145 @@ if ($request->has('profile_image') && $request->profile_image) {
             'is_following' => $isFollowing
         ]);
     }
+
+    public function sendResetCode(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email',
+        ]);
+
+        $code = random_int(100000, 999999);
+
+        DB::table('password_reset_codes')->updateOrInsert(
+            ['email' => $request->email],
+            [
+                'code' => $code,
+                'expires_at' => now()->addMinutes(10),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        Mail::raw("Your password reset code is: $code", function ($message) use ($request) {
+            $message->to($request->email)
+                ->subject('Password Reset Code');
+        });
+
+        return response()->json([
+            'message' => 'Reset code sent successfully',
+        ]);
+    }
+
+    public function verifyResetCode(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'code' => 'required|string',
+        ]);
+
+        $record = DB::table('password_reset_codes')
+            ->where('email', $request->email)
+            ->where('code', $request->code)
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'message' => 'Invalid or expired code',
+            ], 400);
+        }
+
+        return response()->json([
+            'message' => 'Code verified successfully',
+        ]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email',
+            'code' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $record = DB::table('password_reset_codes')
+            ->where('email', $request->email)
+            ->where('code', $request->code)
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'message' => 'Invalid or expired code',
+            ], 400);
+        }
+
+        User::where('email', $request->email)->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        DB::table('password_reset_codes')
+            ->where('email', $request->email)
+            ->delete();
+
+        return response()->json([
+            'message' => 'Password reset successfully',
+        ]);
+    }
+
+    public function sendRegisterCode(Request $request): JsonResponse
+{
+    $request->validate([
+        'email' => 'required|email|unique:users,email',
+    ]);
+
+    $code = random_int(100000, 999999);
+
+    DB::table('email_verification_codes')->updateOrInsert(
+        ['email' => $request->email],
+        [
+            'code' => $code,
+            'expires_at' => now()->addMinutes(10),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]
+    );
+
+    Mail::raw("Your registration verification code is: $code", function ($message) use ($request) {
+        $message->to($request->email)
+            ->subject('Verify Your Email');
+    });
+
+    return response()->json([
+        'message' => 'Verification code sent successfully',
+    ]);
+}
+
+public function verifyRegisterCode(Request $request): JsonResponse
+{
+    $request->validate([
+        'email' => 'required|email',
+        'code' => 'required|string',
+    ]);
+
+    $record = DB::table('email_verification_codes')
+        ->where('email', $request->email)
+        ->where('code', $request->code)
+        ->where('expires_at', '>', now())
+        ->first();
+
+    if (!$record) {
+        return response()->json([
+            'message' => 'Invalid or expired code',
+        ], 400);
+    }
+
+    DB::table('email_verification_codes')
+        ->where('email', $request->email)
+        ->delete();
+
+    return response()->json([
+        'message' => 'Email verified successfully',
+    ]);
+}
 }
