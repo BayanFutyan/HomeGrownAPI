@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Enums\UserRoleEnum;
 use App\Models\User;
 use App\Models\ExhibitionInterest;  // ✅ أضيفي هذا
+use Carbon\Carbon;
 
 class ExhibitionController extends Controller
 {
@@ -76,7 +77,7 @@ public function getByOwner($ownerId, Request $request)
                 'image' => $exhibition->image,
                 'start_date' => $exhibition->start_date,
                 'end_date' => $exhibition->end_date,
-                'status' => $exhibition->status,
+                'status' => $this->getCalculatedStatus($exhibition),
                 'type' => $exhibition->type,
                 'location' => $exhibition->location,
                 'participants_count' => $interestsCount,  // ✅ عدد المهتمين
@@ -240,7 +241,7 @@ public function store(Request $request)
                 'image' => $exhibition->image,
                 'start_date' => $exhibition->start_date,
                 'end_date' => $exhibition->end_date,
-                'status' => $exhibition->status,
+                'status' => $this->getCalculatedStatus($exhibition),
                 'type' => $exhibition->type,
                 'location' => $exhibition->location,
                 'participants_count' => $interestsCount,  // ✅ أضيفي هذا
@@ -393,7 +394,7 @@ public function index()
                     'image' => $exhibition->image,
                     'start_date' => $exhibition->start_date,
                     'end_date' => $exhibition->end_date,
-                    'status' => $exhibition->status,
+                    'status' => $this->getCalculatedStatus($exhibition),
                     'type' => $exhibition->type,
                     'location' => $exhibition->location,
                     'participants_count' => $interestsCount,
@@ -431,6 +432,33 @@ public function getUserInterests()
             return $interest->exhibition;
         }),
     ]);
+}
+
+private function getCalculatedStatus($exhibition)
+{
+    $today = Carbon::today();
+
+    $startDate = $exhibition->start_date
+        ? Carbon::parse($exhibition->start_date)
+        : null;
+
+    $endDate = $exhibition->end_date
+        ? Carbon::parse($exhibition->end_date)
+        : null;
+
+    if (!$startDate || !$endDate) {
+        return 'upcoming';
+    }
+
+    if ($today->lt($startDate)) {
+        return 'upcoming';
+    }
+
+    if ($today->between($startDate, $endDate)) {
+        return 'active';
+    }
+
+    return 'ended';
 }
 
 }
