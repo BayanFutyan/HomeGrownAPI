@@ -29,13 +29,6 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
-
-Route::post('/register/send-code', [UserController::class, 'sendRegisterCode']);
-Route::post('/register/verify-code', [UserController::class, 'verifyRegisterCode']);
-
-Route::post('/forgot-password/send-code', [UserController::class, 'sendResetCode']);
-Route::post('/forgot-password/verify-code', [UserController::class, 'verifyResetCode']);
-Route::post('/forgot-password/reset', [UserController::class, 'resetPassword']);
 /*
 |--------------------------------------------------------------------------
 | Public Routes (بدون توكن - للجميع)
@@ -430,12 +423,6 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'role:admin'])->group(functi
     Route::get('/download-report', [AdminDashboardController::class, 'downloadReport']);
 });
 
-Route::prefix('admin')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    Route::get('/overview', [AdminDashboardController::class, 'overview']);
-    Route::get('/growth', [AdminDashboardController::class, 'growth']);
-    Route::get('/insights', [AdminDashboardController::class, 'insights']);
-    Route::get('/top-rankings', [AdminDashboardController::class, 'topRankings']);
-});
 /*
 |--------------------------------------------------------------------------
 | Test Routes
