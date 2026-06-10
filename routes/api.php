@@ -421,6 +421,15 @@ Route::prefix('artisan')->middleware(['auth:sanctum', 'role:artisan'])->group(fu
     Route::get('/products/{id}/comments', [ProductController::class, 'getArtisanComments']);
 });
 
+
+Route::prefix('admin')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
+    Route::get('/overview', [AdminDashboardController::class, 'overview']);
+    Route::get('/growth', [AdminDashboardController::class, 'growth']);
+    Route::get('/insights', [AdminDashboardController::class, 'insights']);
+    Route::get('/top-rankings', [AdminDashboardController::class, 'topRankings']);
+    Route::get('/download-report', [AdminDashboardController::class, 'downloadReport']);
+});
+
 Route::prefix('admin')->middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('/overview', [AdminDashboardController::class, 'overview']);
     Route::get('/growth', [AdminDashboardController::class, 'growth']);

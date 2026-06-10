@@ -8,44 +8,39 @@ use App\Models\Product;
 use App\Models\Exhibition;
 use App\Models\Order;
 use Carbon\Carbon;
-use App\Models\Follower;
-use App\Models\Rating;
-use App\Models\OrderItem;
-use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 
 class AdminDashboardController extends Controller
 {
+    // ===== Overview Data =====
     public function overview()
     {
         return response()->json([
             'total_customers' => User::where('role', 'user')->count(),
             'total_artisans' => User::where('role', 'artisan')->count(),
             'total_exhibition_owners' => User::where('role', 'exhibition_owner')->count(),
-
             'products_last_month' => Product::whereBetween('created_at', [
                 Carbon::now()->subMonth()->startOfMonth(),
                 Carbon::now()->subMonth()->endOfMonth(),
             ])->count(),
-
             'exhibitions_last_month' => Exhibition::whereBetween('created_at', [
                 Carbon::now()->subMonth()->startOfMonth(),
                 Carbon::now()->subMonth()->endOfMonth(),
             ])->count(),
-
             'orders_last_month' => Order::whereBetween('created_at', [
                 Carbon::now()->subMonth()->startOfMonth(),
                 Carbon::now()->subMonth()->endOfMonth(),
             ])->count(),
-
             'new_users_last_month' => User::where('role', '!=', 'admin')
                 ->whereBetween('created_at', [
                     Carbon::now()->subMonth()->startOfMonth(),
                     Carbon::now()->subMonth()->endOfMonth(),
-                ])
-                ->count(),
+                ])->count(),
         ]);
     }
 
+    // ===== Monthly Growth =====
     private function monthlyCounts($model, $months = 5, $excludeAdmin = false)
     {
         $labels = [];
@@ -65,10 +60,7 @@ class AdminDashboardController extends Controller
             $values[] = $query->count();
         }
 
-        return [
-            'labels' => $labels,
-            'values' => $values,
-        ];
+        return ['labels' => $labels, 'values' => $values];
     }
 
     public function growth()
@@ -87,39 +79,7 @@ class AdminDashboardController extends Controller
         ]);
     }
 
-    public function insights()
-    {
-        $mostLikedProduct = Product::orderByDesc('likes_count')->first();
-
-        $mostActiveArtisan = User::where('role', 'artisan')
-            ->withCount('products')
-            ->orderByDesc('products_count')
-            ->first();
-
-        $mostActiveExhibition = Exhibition::all()
-            ->sortByDesc(function ($exhibition) {
-                return $exhibition->participants_count;
-            })
-            ->first();
-
-        return response()->json([
-            'most_liked_product' => [
-                'name' => $mostLikedProduct?->name ?? 'No product yet',
-                'likes' => $mostLikedProduct?->likes_count ?? 0,
-            ],
-
-            'most_active_artisan' => [
-                'name' => $mostActiveArtisan?->name ?? 'No artisan yet',
-                'products' => $mostActiveArtisan?->products_count ?? 0,
-            ],
-
-            'most_active_exhibition' => [
-                'name' => $mostActiveExhibition?->title ?? 'No exhibition yet',
-                'participants' => $mostActiveExhibition?->participants_count ?? 0,
-            ],
-        ]);
-    }
-
+    // ===== Top Rankings for PDF =====
     public function topRankings()
     {
         $topProducts = Product::query()
@@ -131,7 +91,7 @@ class AdminDashboardController extends Controller
             ->get()
             ->map(function ($product) {
                 return [
-                    'id' => (int) $product->id,  // ✅ تحويل إلى int
+                    'id' => (int) $product->id,
                     'name' => (string) $product->name,
                     'subtitle' => (string) ($product->seller?->name ?? 'Unknown artisan'),
                     'sales' => (int) ($product->sales_count ?? 0),
@@ -141,20 +101,13 @@ class AdminDashboardController extends Controller
             });
 
         $topArtisans = User::where('role', 'artisan')
-            ->withCount([
-                'products',
-                'followers',
-            ])
+            ->withCount(['products', 'followers'])
             ->withAvg('ratingsReceived', 'rating')
             ->get()
             ->map(function ($artisan) {
                 $salesCount = (int) Product::where('seller_id', $artisan->id)->sum('sales_count');
                 $rating = round($artisan->ratings_received_avg_rating ?? 0, 1);
-
-                $score = ($artisan->followers_count * 2) +
-                    ($rating * 10) +
-                    ($salesCount * 3) +
-                    ($artisan->products_count * 1);
+                $score = ($artisan->followers_count * 2) + ($rating * 10) + ($salesCount * 3) + ($artisan->products_count * 1);
 
                 return [
                     'name' => (string) $artisan->name,
@@ -189,5 +142,133 @@ class AdminDashboardController extends Controller
             'top_artisans' => $topArtisans,
             'top_exhibitions' => $topExhibitions,
         ]);
+    }
+
+    // ===== Download PDF Report =====
+    public function downloadReport(Request $request)
+    {
+        $year = Carbon::now()->year;
+        $currentMonth = Carbon::now()->month;
+        $lastCompleteMonth = $currentMonth - 1; // آخر شهر كامل
+        $month = $request->query('month', $lastCompleteMonth);
+
+        // ===== Overview =====
+        $overview = [
+            'total_customers' => User::where('role', 'user')->count(),
+            'total_artisans' => User::where('role', 'artisan')->count(),
+            'total_exhibition_owners' => User::where('role', 'exhibition_owner')->count(),
+            'products_last_month' => Product::whereYear('created_at', $year)
+                ->whereMonth('created_at', $month)
+                ->count(),
+            'exhibitions_last_month' => Exhibition::whereYear('created_at', $year)
+                ->whereMonth('created_at', $month)
+                ->count(),
+            'orders_last_month' => Order::whereYear('created_at', $year)
+                ->whereMonth('created_at', $month)
+                ->count(),
+            'new_users_last_month' => User::where('role', '!=', 'admin')
+                ->whereYear('created_at', $year)
+                ->whereMonth('created_at', $month)
+                ->count(),
+        ];
+
+        // ===== Growth =====
+        $growth = [
+            'labels' => [],
+            'users' => [],
+            'products' => [],
+            'orders' => [],
+            'exhibitions' => [],
+        ];
+
+        for ($m = 1; $m <= $month; $m++) {
+
+            $growth['labels'][] = Carbon::create($year, $m, 1)->format('M');
+
+            $growth['users'][] = User::where('role', '!=', 'admin')
+                ->whereYear('created_at', $year)
+                ->whereMonth('created_at', $m)
+                ->count();
+
+            $growth['products'][] = Product::whereYear('created_at', $year)
+                ->whereMonth('created_at', $m)
+                ->count();
+
+            $growth['orders'][] = Order::whereYear('created_at', $year)
+                ->whereMonth('created_at', $m)
+                ->count();
+
+            $growth['exhibitions'][] = Exhibition::whereYear('created_at', $year)
+                ->whereMonth('created_at', $m)
+                ->count();
+        }
+
+        // ===== Top Rankings =====
+        $topProducts = Product::query()
+            ->select('id', 'name', 'seller_id', 'sales_count', 'likes_count', 'image')
+            ->with('seller:id,name')
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->orderByDesc('sales_count')
+            ->orderByDesc('likes_count')
+            ->limit(10)
+            ->get()
+            ->map(fn($product) => [
+                'id' => (int)$product->id,
+                'name' => (string)$product->name,
+                'subtitle' => (string)($product->seller?->name ?? 'Unknown artisan'),
+                'sales' => (int)($product->sales_count ?? 0),
+                'likes' => (int)($product->likes_count ?? 0),
+                'image' => $product->image ? asset($product->image) : null,
+            ]);
+
+        $topArtisans = User::where('role', 'artisan')
+            ->withCount(['products', 'followers'])
+            ->withAvg('ratingsReceived', 'rating')
+            ->get()
+            ->map(function ($artisan) {
+                $salesCount = (int) Product::where('seller_id', $artisan->id)->sum('sales_count');
+                $rating = round($artisan->ratings_received_avg_rating ?? 0, 1);
+                $score = ($artisan->followers_count * 2) + ($rating * 10) + ($salesCount * 3) + ($artisan->products_count * 1);
+                return [
+                    'name' => (string)$artisan->name,
+                    'followers' => (int)$artisan->followers_count,
+                    'rating' => (float)$rating,
+                    'sales' => $salesCount,
+                    'products' => (int)$artisan->products_count,
+                    'score' => (int)$score,
+                    'profile_image' => $artisan->profile_image ? asset($artisan->profile_image) : null,
+                ];
+            })
+            ->sortByDesc('score')->take(10)->values();
+
+        $topExhibitions = Exhibition::with('owner:id,name,profile_image')
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->get()
+            ->map(fn($exhibition) => [
+                'name' => (string)$exhibition->title,
+                'subtitle' => (string)($exhibition->owner?->name ?? 'Unknown owner'),
+                'interested_users' => (int)$exhibition->interests()->count(),
+                'owner_profile_image' => $exhibition->owner?->profile_image ? asset($exhibition->owner->profile_image) : null,
+            ])
+            ->sortByDesc('interested_users')->take(10)->values();
+
+        $topRankings = [
+            'top_products' => $topProducts,
+            'top_artisans' => $topArtisans,
+            'top_exhibitions' => $topExhibitions,
+        ];
+
+        // ===== Generate PDF =====
+        $pdf = Pdf::loadView('admin.reports.monthly', [
+            'overview' => $overview,
+            'growth' => $growth,
+            'topRankings' => $topRankings,
+            'month' => $month,
+            'year' => $year,
+        ]);
+
+        return $pdf->download("HomeGrown_Monthly_Report_{$month}_{$year}.pdf");
     }
 }
